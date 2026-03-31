@@ -54,3 +54,9 @@ footer { background: #2e7d32; color: white; text-align: center; padding: 1.5rem;
   border-radius: 12px;
   margin-bottom: 2rem;
 }
+
+/* スライドショー */
+.slideshow { position: relative; width: 60%; margin: 0 auto 2rem auto; }
+.slide { display: none; }
+.slide.active { display: block; }
+.slide img { width: 100%; max-height: 300px; object-fit: cover; border-radius: 12px; }

@@ -2,8 +2,17 @@
 {% block content %}
 
 <section id="hero">
-  <img src="{{ url_for('static', filename='images/集落センター.png') }}" 
-       alt="集落センター" class="hero-img">    
+  <div class="slideshow">
+    <div class="slide active">
+      <img src="{{ url_for('static', filename='images/集落センター.png') }}" alt="集落センター">
+    </div>
+    <div class="slide">
+      <img src="{{ url_for('static', filename='images/祭り.png') }}" alt="祭り">
+    </div>
+    <div class="slide">
+      <img src="{{ url_for('static', filename='images/美化運動.png') }}" alt="美化運動">
+    </div>
+  </div>
   <h1>{{ company.tagline }}</h1>
   <p>{{ company.description }}</p>
   <a href="#contact" class="btn">お問い合わせはこちら</a>
