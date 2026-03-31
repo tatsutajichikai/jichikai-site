@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section id="hero">
+  <img src="{{ url_for('static', filename='images/集落センター.png') }}" 
+       alt="集落センター" class="hero-img">    
+  <h1>{{ company.tagline }}</h1>
+  <p>{{ company.description }}</p>
+  <a href="#contact" class="btn">お問い合わせはこちら</a>
+</section>
+
+<section id="about">
+  <h2>自治会概要</h2>
+  <table>
+    <tr><th>自治会名</th>  <td>{{ company.name }}</td></tr>
+    <tr><th>所在地</th>    <td>{{ company.address }}</td></tr>
+    <tr><th>連絡先</th>    <td>{{ company.phone }}</td></tr>
+    <tr><th>メール</th>    <td>{{ company.email }}</td></tr>
+    <tr><th>定例会議</th>  <td>{{ company.meeting_day }}</td></tr>
+    <tr><th>会議場所</th>  <td>{{ company.meeting_place }}</td></tr>
+  </table>
+</section>
+
+<section id="services">
+  <h2>活動内容</h2>
+  <div class="cards">
+    {% for s in company.services %}
+    <div class="card">
+      <div class="icon">{{ s.icon }}</div>
+      <h3>{{ s.title }}</h3>
+      <p>{{ s.desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section id="events">
+  <h2>年間行事カレンダー</h2>
+  <div class="timeline">
+    {% for e in company.events %}
+    <div class="timeline-item">
+      <div class="timeline-month">{{ e.month }}</div>
+      <div class="timeline-name">{{ e.name }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section id="contact">
+  <h2>お問い合わせ</h2>
+  <p>自治会への活動についてのご質問はお気軽にご連絡ください。</p>
+  <br>
+  <p>📞 {{ company.phone }}</p>
+  <p>📧 {{ company.email }}</p>
+  <p>🏠 {{ company.meeting_place }}（{{ company.meeting_day }}）</p>
+</section>
+
+{% endblock %}
