@@ -130,9 +130,9 @@
     </div>
 
     {% elif file_ext in ['docx', 'xlsx', 'pptx'] %}
-    <iframe src="https://docs.google.com/viewer?url={{ file_url_abs }}&embedded=true"
+    <iframe src="https://view.officeapps.live.com/op/embed.aspx?src={{ file_url_abs }}"
             allowfullscreen></iframe>
-
+    
     {% else %}
     <div class="other-file-area">
       <div class="file-icon-big">📄</div>
