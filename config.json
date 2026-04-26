@@ -1,5 +1,5 @@
 {
-  "admin2_password_hash": "scrypt:32768:8:1$P2GWFTD9B1JSGdmw$c0fca48e89b3dda7fb4e469babb5bb186eb453991b89a8a6a31664a329eac80940609586a219ec84bf7ec66a8c3e9bb80f71652e447d7202af12048d5e06f750",
+  "admin2_password_hash": "scrypt:32768:8:1$fN4pfDbHMygZaR6U$bd6b13d8f54cb99eac7bdbc901ee3640b8dc67f9c3cb2ea6df99291480a3705859e2f68c6eab27a5ee9e75afc470e5147c338dff3f59f7d5bb7cbe8a3f8e6c36",
   "admin1_users": {},
   "kyogiin_users": {},
   "file_meta": {}
