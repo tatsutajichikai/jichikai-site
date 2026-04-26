@@ -39,12 +39,12 @@
     }
 
     iframe { width: 100%; height: 100%; border: none; }
-
-    video { width: 100%; height: 100%; background: #000; }
+    video  { width: 100%; height: 100%; background: #000; }
 
     .image-area {
       display: flex; align-items: center; justify-content: center;
       width: 100%; height: 100%; overflow: auto; background: #222;
+      position: relative;
     }
     .image-area img {
       max-width: 100%; max-height: 100%;
@@ -70,6 +70,7 @@
     .other-file-area .file-icon-big { font-size: 5rem; margin-bottom: 20px; }
     .other-file-area p { font-size: 1.05rem; margin-bottom: 16px; opacity: .85; }
 
+    /* 透かし（PDF以外用） */
     .watermark-overlay {
       position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
       pointer-events: none; z-index: 100; overflow: hidden;
@@ -109,72 +110,13 @@
   <div class="viewer-body">
 
     {% if file_ext == 'pdf' %}
+    <!-- PDF：PDF.jsで全ページ表示＋透かしをcanvasに直接描画 -->
     <div id="pdf-container" style="width:100%;height:100%;overflow-y:auto;background:#525659;padding:10px;box-sizing:border-box;">
       <div id="pdf-pages"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    {% if watermark %}
-    const userName  = {{ user_name | tojson }};
-    const now       = new Date();
-    const pad       = n => String(n).padStart(2, "0");
-    const waterText = `${userName}　${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    {% endif %}
-
-    function drawWatermark(canvas) {
-      {% if watermark %}
-      const ctx = canvas.getContext('2d');
-      ctx.save();
-      ctx.font = `bold ${canvas.width * 0.04}px sans-serif`;
-      ctx.fillStyle = 'rgba(180, 0, 0, 0.18)';
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(-35 * Math.PI / 180);
-      const cols = 4;
-      const rows = 6;
-      const spacingX = canvas.width  / (cols - 1);
-      const spacingY = canvas.height / (rows - 1);
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const x = -canvas.width  / 2 + spacingX * c;
-          const y = -canvas.height / 2 + spacingY * r;
-          ctx.fillText(waterText, x, y);
-        }
-      }
-      ctx.restore();
-      {% endif %}
-    }
-
-    pdfjsLib.getDocument("{{ file_url }}").promise.then(function(doc) {
-      const container = document.getElementById('pdf-pages');
-      const promises = [];
-      for (let i = 1; i <= doc.numPages; i++) {
-        promises.push(
-          doc.getPage(i).then(function(page) {
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'position:relative;margin:0 auto 10px;display:block;';
-            const canvas = document.createElement('canvas');
-            canvas.style.cssText = 'display:block;max-width:100%;';
-            const scale = (container.clientWidth || window.innerWidth) / page.getViewport({scale:1}).width;
-            const viewport = page.getViewport({scale: scale});
-            canvas.width  = viewport.width;
-            canvas.height = viewport.height;
-            wrapper.style.width  = viewport.width  + 'px';
-            wrapper.style.height = viewport.height + 'px';
-            wrapper.appendChild(canvas);
-            container.appendChild(wrapper);
-            return page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise
-              .then(() => drawWatermark(canvas));
-          })
-        );
-      }
-    });
-    </script>
-        
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif'] %}
+    <!-- 画像：透かしoverlayで対応 -->
     <div class="image-area">
       <img src="{{ file_url }}" alt="{{ display_name }}">
     </div>
@@ -191,10 +133,6 @@
       <pre id="textContent">読み込み中...</pre>
     </div>
 
-    {% elif file_ext in ['docx', 'xlsx', 'pptx'] %}
-    <iframe src="https://view.officeapps.live.com/op/embed.aspx?src={{ file_url_abs }}"
-            allowfullscreen></iframe>
-    
     {% else %}
     <div class="other-file-area">
       <div class="file-icon-big">📄</div>
@@ -215,11 +153,20 @@
 
   </div>
 
-  {% if watermark %}
+  <!-- 透かしoverlay（PDF以外に使用） -->
+  {% if file_ext != 'pdf' %}
+  {% if watermark or file_type == "gijiroku" %}
   <div class="watermark-overlay" id="watermarkOverlay"></div>
+  {% endif %}
+  {% endif %}
+
+  <!-- PDF.js -->
+  {% if file_ext == 'pdf' %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   {% endif %}
 
   <script>
+    // キーボードショートカット無効化
     {% if not allow_print %}
     document.addEventListener("keydown", function(e) {
       if (
@@ -230,6 +177,7 @@
     });
     {% endif %}
 
+    // テキストファイル読み込み
     {% if file_ext == 'txt' %}
     fetch("{{ file_url }}")
       .then(r => r.text())
@@ -237,12 +185,16 @@
       .catch(() => { document.getElementById("textContent").textContent = "読み込みに失敗しました。"; });
     {% endif %}
 
-    {% if watermark %}
+    // 透かしテキスト生成（PDF・非PDF共通）
     const userName  = {{ user_name | tojson }};
     const now       = new Date();
     const pad       = n => String(n).padStart(2, "0");
     const waterText = `${userName}　${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const overlay   = document.getElementById("watermarkOverlay");
+
+    // PDF以外の透かしoverlay
+    {% if file_ext != 'pdf' %}
+    {% if watermark or file_type == "gijiroku" %}
+    const overlay = document.getElementById("watermarkOverlay");
     const cols = Math.ceil(window.innerWidth  / 320) + 2;
     const rows = Math.ceil(window.innerHeight / 160) + 2;
     for (let r = -1; r < rows; r++) {
@@ -256,49 +208,42 @@
       }
     }
     {% endif %}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
+    {% endif %}
+
+    // PDFをPDF.jsで表示＋透かしをcanvasに直接描画
     {% if file_ext == 'pdf' %}
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    let pdfDoc = null;
-    let currentPage = 1;
+    const showWatermark = {{ 'true' if (watermark or file_type == 'gijiroku') else 'false' }};
+
+    function drawWatermark(canvas) {
+      if (!showWatermark) return;
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      const fontSize = Math.max(14, canvas.width * 0.035);
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      ctx.fillStyle = 'rgba(180, 0, 0, 0.18)';
+      const spacingX = canvas.width  / 3;
+      const spacingY = canvas.height / 5;
+      for (let r = 0; r <= 5; r++) {
+        for (let c = 0; c <= 3; c++) {
+          ctx.save();
+          ctx.translate(spacingX * c, spacingY * r);
+          ctx.rotate(-35 * Math.PI / 180);
+          ctx.fillText(waterText, 0, 0);
+          ctx.restore();
+        }
+      }
+      ctx.restore();
+    }
 
     pdfjsLib.getDocument("{{ file_url }}").promise.then(function(doc) {
-      pdfDoc = doc;
-      updatePageInfo();
-      renderPage(currentPage);
-    });
-
-    function renderPage(num) {
-      pdfDoc.getPage(num).then(function(page) {
-        const canvas  = document.getElementById('pdf-canvas');
-        const ctx     = canvas.getContext('2d');
-        const container = document.getElementById('pdf-container');
-        const scale   = container.clientWidth / page.getViewport({scale:1}).width;
-        const viewport = page.getViewport({scale: scale});
-        canvas.width  = viewport.width;
-        canvas.height = viewport.height;
-        page.render({canvasContext: ctx, viewport: viewport});
-      });
-    }
-
-    function changePage(delta) {
-      const newPage = currentPage + delta;
-      if (newPage < 1 || newPage > pdfDoc.numPages) return;
-      currentPage = newPage;
-      updatePageInfo();
-      renderPage(currentPage);
-      document.getElementById('pdf-container').scrollTo(0, 0);
-    }
-
-    function updatePageInfo() {
-      document.getElementById('page-info').textContent =
-        `${currentPage} / ${pdfDoc.numPages} ページ`;
-    }
-    {% endif %}
-    </script>
-  </script>
-</body>
-</html>
+      const container = document.getElementById('pdf-pages');
+      for (let i = 1; i <= doc.numPages; i++) {
+        doc.getPage(i).then(function(page) {
+          const wrapper = document.createElement('div');
+          wrapper.style.cssText = 'position:relative;margin:0 auto 10px;';
+          const canvas = document.createElement('canvas');
+          canvas.style.cssText = 'display:block;max-width:100%;';
+          const scale = (container.clientWidth || windo
