@@ -49,6 +49,7 @@ os.makedirs(SHIRYO_FOLDER,   exist_ok=True)
 os.makedirs(GIJIROKU_FOLDER, exist_ok=True)
 
 ALLOWED_GIJIROKU = {"pdf"}
+BLOCKED_SHIRYO   = {"docx", "xlsx", "pptx", "doc", "xls", "ppt"}
 
 def load_config():
     default = {
@@ -347,9 +348,12 @@ def admin_dashboard():
             allow_print = request.form.get("print")     == "1"
             if not file or file.filename == "":
                 msg = ("danger", "ファイルを選択してください")
+            elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
+                msg = ("danger", "Word・Excel・PowerPointはアップロードできません。PDF・画像に変換してください。")
             else:
                 month_num = MONTHS.index(month) + 1
-                original  = secure_filename(file.filename)
+                ext       = secure_filename(file.filename).rsplit(".", 1)[-1].lower()
+                original  = file.filename
                 save_name = f"{month_num:02d}_{original}"
                 file.save(os.path.join(SHIRYO_FOLDER, save_name))
                 cfg.setdefault("file_meta", {})[save_name] = {
