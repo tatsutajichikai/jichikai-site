@@ -522,6 +522,36 @@ def admin_dashboard():
         get_display_name=get_display_name,
     )
 
+import io
+
+@app.route("/admin/download_config")
+def admin_download_config():
+    if admin_rank() < 2:
+        return redirect(url_for("admin_login"))
+    cfg = load_config()
+    data = json.dumps(cfg, ensure_ascii=False, indent=2)
+    buf = io.BytesIO(data.encode("utf-8"))
+    return send_from_directory(
+        os.path.dirname(os.path.abspath(CONFIG_FILE)),
+        CONFIG_FILE,
+        as_attachment=True,
+        download_name="jichikai_config_backup.json"
+    )
+
+@app.route("/admin/upload_config", methods=["POST"])
+def admin_upload_config():
+    if admin_rank() < 2:
+        return redirect(url_for("admin_login"))
+    file = request.files.get("config_file")
+    if not file or file.filename == "":
+        return redirect(url_for("admin_dashboard"))
+    try:
+        data = json.load(file)
+        save_config(data)
+    except Exception:
+        pass
+    return redirect(url_for("admin_dashboard"))
+
 @app.route("/ping")
 def ping():
     return "pong", 200

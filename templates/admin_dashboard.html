@@ -13,6 +13,17 @@
       {% if admin_rank == 1 %}
       <a href="{{ url_for('admin1_change_password') }}" class="btn btn-outline btn-sm">🔑 パスワード変更</a>
       {% endif %}
+      {% if admin_rank == 2 %}
+      <a href="{{ url_for('admin_download_config') }}" class="btn btn-outline btn-sm">⬇️ バックアップ</a>
+      <form method="post" action="{{ url_for('admin_upload_config') }}"
+            enctype="multipart/form-data" style="display:inline;">
+        <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+          ⬆️ 復元
+          <input type="file" name="config_file" accept=".json"
+                 style="display:none;" onchange="this.form.submit()">
+        </label>
+      </form>
+      {% endif %}
       <a href="{{ url_for('admin_logout') }}" class="btn btn-outline btn-sm">ログアウト</a>
     </div>
   </div>
