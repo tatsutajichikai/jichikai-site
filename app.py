@@ -3,7 +3,7 @@ from flask import (
     redirect, url_for, send_from_directory, abort,
     send_file
 )
-import os, json, io
+import os, json, io, unicodedata, re
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
@@ -44,6 +44,12 @@ CONFIG_FILE = "config.json"
 ALLOWED_GIJIROKU = {"pdf"}
 BLOCKED_SHIRYO   = {"docx", "xlsx", "pptx", "doc", "xls", "ppt"}
 IMAGE_EXTS       = {"jpg", "jpeg", "png", "gif", "webp"}
+
+def safe_public_id(name):
+    """ファイル名をCloudinaryのpublic_idに使える形に変換（日本語はそのまま許可）"""
+    # スラッシュとバックスラッシュだけ除去
+    name = name.replace("/", "_").replace("\\", "_")
+    return name
 
 def load_config():
     default = {
@@ -111,19 +117,22 @@ def get_files_by_month(folder_type):
             try:
                 res = cloudinary.api.resources(
                     type="upload",
-                    prefix=f"jichikai/{folder_type}/",
+                    prefix=f"{folder_type}_",
                     max_results=500,
                     resource_type=resource_type
                 )
                 resources.extend(res.get("resources", []))
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Cloudinary {resource_type} error: {e}")
 
         for r in resources:
             public_id = r["public_id"]
             base_name = public_id.split("/")[-1]
             fmt = r.get("format", "")
             fname = f"{base_name}.{fmt}" if fmt else base_name
+            # shiryo_ or gijiroku_ プレフィックスを除去
+            if fname.startswith(f"{folder_type}_"):
+                fname = fname[len(f"{folder_type}_"):]
             prefix = fname.split("_")[0]
             if prefix.isdigit() and 1 <= int(prefix) <= 12:
                 result[f"{int(prefix)}月"].append(fname)
@@ -133,21 +142,19 @@ def get_files_by_month(folder_type):
 
 def get_cloudinary_url(folder_type, fname):
     """CloudinaryのファイルURLを取得"""
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
     if "." in fname:
         base = fname.rsplit(".", 1)[0]
         ext  = fname.rsplit(".", 1)[1].lower()
     else:
         base = fname
         ext  = ""
-    public_id     = f"jichikai/{folder_type}/{base}"
+    public_id     = f"{folder_type}_{base}"
     resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    
     if resource_type == "raw":
-        # rawの場合はCloudinaryの直接URLを構築
-        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
         url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
     else:
-        url, _ = cloudinary_url(public_id, resource_type=resource_type)
+        url, _ = cloudinary_url(public_id, resource_type="image")
     return url
 
 def get_display_name(fname):
@@ -374,12 +381,12 @@ def admin_dashboard():
             elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
                 msg = ("danger", "Word・Excel・PowerPointはアップロードできません。PDF・画像に変換してください。")
             else:
-                month_num = MONTHS.index(month) + 1
-                original  = file.filename
-                ext       = original.rsplit(".", 1)[-1].lower() if "." in original else ""
-                base_name = original.rsplit(".", 1)[0] if "." in original else original
-                save_name = f"{month_num:02d}_{original}"
-                public_id = f"jichikai/shiryo/{month_num:02d}_{base_name}"
+                month_num     = MONTHS.index(month) + 1
+                original      = file.filename
+                ext           = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+                base_name     = original.rsplit(".", 1)[0] if "." in original else original
+                save_name     = f"{month_num:02d}_{original}"
+                public_id     = f"shiryo_{month_num:02d}_{safe_public_id(base_name)}"
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
                     cloudinary.uploader.upload(
@@ -410,7 +417,7 @@ def admin_dashboard():
                 original  = file.filename
                 base_name = original.rsplit(".", 1)[0] if "." in original else original
                 save_name = f"{month_num:02d}_{original}"
-                public_id = f"jichikai/gijiroku/{month_num:02d}_{base_name}"
+                public_id = f"gijiroku_{month_num:02d}_{safe_public_id(base_name)}"
                 try:
                     cloudinary.uploader.upload(
                         file,
@@ -425,15 +432,13 @@ def admin_dashboard():
                     msg = ("danger", f"アップロードエラー: {e}")
 
         elif action == "delete_shiryo":
-            fname = request.form.get("filename", "")
-            ext   = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-            base  = fname.rsplit(".", 1)[0] if "." in fname else fname
+            fname         = request.form.get("filename", "")
+            ext           = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+            base          = fname.rsplit(".", 1)[0] if "." in fname else fname
             resource_type = "image" if ext in IMAGE_EXTS else "raw"
+            public_id     = f"shiryo_{safe_public_id(base)}"
             try:
-                cloudinary.uploader.destroy(
-                    f"jichikai/shiryo/{base}",
-                    resource_type=resource_type
-                )
+                cloudinary.uploader.destroy(public_id, resource_type=resource_type)
                 cfg.get("file_meta", {}).pop(fname, None)
                 save_config(cfg)
                 msg = ("success", f"資料「{get_display_name(fname)}」を削除しました")
@@ -441,13 +446,11 @@ def admin_dashboard():
                 msg = ("danger", f"削除エラー: {e}")
 
         elif action == "delete_gijiroku":
-            fname = request.form.get("filename", "")
-            base  = fname.rsplit(".", 1)[0] if "." in fname else fname
+            fname     = request.form.get("filename", "")
+            base      = fname.rsplit(".", 1)[0] if "." in fname else fname
+            public_id = f"gijiroku_{safe_public_id(base)}"
             try:
-                cloudinary.uploader.destroy(
-                    f"jichikai/gijiroku/{base}",
-                    resource_type="raw"
-                )
+                cloudinary.uploader.destroy(public_id, resource_type="raw")
                 msg = ("success", f"議事録「{get_display_name(fname)}」を削除しました")
             except Exception as e:
                 msg = ("danger", f"削除エラー: {e}")
