@@ -141,7 +141,13 @@ def get_cloudinary_url(folder_type, fname):
         ext  = ""
     public_id     = f"jichikai/{folder_type}/{base}"
     resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    url, _ = cloudinary_url(public_id, resource_type=resource_type)
+    
+    if resource_type == "raw":
+        # rawの場合はCloudinaryの直接URLを構築
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
+        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
+    else:
+        url, _ = cloudinary_url(public_id, resource_type=resource_type)
     return url
 
 def get_display_name(fname):
