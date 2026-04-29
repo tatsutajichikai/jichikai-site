@@ -126,14 +126,23 @@ def get_files_by_month(folder_type):
                     public_id = r["public_id"]
                     base_name = public_id.split("/")[-1]
                     fmt = r.get("format", "")
+
                     if not fmt:
-                        if r.get("resource_type") == "raw":
+                        if "." in base_name:
+                            fmt = base_name.rsplit(".", 1)[1].lower()
+                        elif resource_type == "raw":
                             fmt = "pdf"
 
-                    fname = base_name + "." + fmt
+                    if "." in base_name:
+                        fname = base_name
+                    else:
+                        fname = base_name + ("." + fmt if fmt else "")
+
                     prefix_num = base_name.split("_")[0]
                     if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
-                        result[str(int(prefix_num)) + "月"].append(fname)
+                        month_key = str(int(prefix_num)) + "月"
+                        if fname not in result[month_key]:
+                            result[month_key].append(fname)
             except Exception as e:
                 print("Cloudinary " + resource_type + " list error: " + str(e))
     except Exception as e:
@@ -149,15 +158,11 @@ def get_cloudinary_url(folder_type, fname):
         base = fname
         ext  = ""
     public_id = "jichikai/" + folder_type + "/" + base
-    resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    if ext == "pdf":
-        url = f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.pdf"
-    elif resource_type == "raw":
-        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
-    else:
+    if ext in IMAGE_EXTS:
         url, _ = cloudinary_url(public_id, resource_type="image")
+    else:
+        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
     return url
-
 def get_display_name(fname):
     parts = fname.split("_", 1)
     return parts[1] if len(parts) > 1 else fname
