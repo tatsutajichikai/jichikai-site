@@ -146,8 +146,10 @@ def get_cloudinary_url(folder_type, fname):
         ext  = ""
     public_id = "jichikai/" + folder_type + "/" + base
     resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    if resource_type == "raw":
-        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/" + public_id + "." + ext
+    if ext == "pdf":
+        url = f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.pdf"
+    elif resource_type == "raw":
+        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
     else:
         url, _ = cloudinary_url(public_id, resource_type="image")
     return url
