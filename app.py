@@ -384,11 +384,13 @@ def admin_dashboard():
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
                     cloudinary.uploader.upload(
-                        file,
-                        public_id=f"{month_num:02d}_{base_name}",
+                        file.stream,  # ← ここ重要
+                        public_id="{:02d}_{}".format(month_num, base_name),
                         folder="jichikai/shiryo",
-                        resource_type=resource_type,
-                        use_filename=False,
+                        resource_type="raw" if ext == "pdf" else "image",
+                        format=ext,  # ← 必須
+                        filename=original,  # ← ★これが超重要
+                        use_filename=True,
                         unique_filename=False,
                         overwrite=True
                     )
@@ -416,11 +418,13 @@ def admin_dashboard():
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
                     cloudinary.uploader.upload(
-                        file,
-                        public_id=f"{month_num:02d}_{base_name}",
+                        file.stream,
+                        public_id="{:02d}_{}".format(month_num, base_name),
                         folder="jichikai/gijiroku",
                         resource_type="raw",
-                        use_filename=False,
+                        format="pdf",
+                        filename=original,  # ← 必須
+                        use_filename=True,
                         unique_filename=False,
                         overwrite=True
                     )
