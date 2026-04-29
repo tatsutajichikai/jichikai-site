@@ -1,7 +1,4 @@
-from flask import (
-    Flask, render_template, request, session,
-    redirect, url_for, abort, send_file
-)
+﻿from flask import Flask, render_template, request, session, redirect, url_for, abort, send_file
 import os, json, io, re
 import cloudinary
 import cloudinary.uploader
@@ -37,14 +34,12 @@ def auto_logout_on_leave():
             session.pop("admin_name", None)
 
 CONFIG_FILE = "config.json"
-
 ALLOWED_GIJIROKU = {"pdf"}
 BLOCKED_SHIRYO   = {"docx", "xlsx", "pptx", "doc", "xls", "ppt"}
 IMAGE_EXTS       = {"jpg", "jpeg", "png", "gif", "webp"}
 
 def safe_public_id(name):
-    name = name.replace("/", "_").replace("\\", "_")
-    return name
+    return name.replace("/", "_").replace("\\", "_")
 
 def strip_month_prefix(name):
     return re.sub(r"^\d{1,2}_", "", name)
@@ -367,7 +362,7 @@ def admin_dashboard():
             if not file or file.filename == "":
                 msg = ("danger", "ファイルを選択してください")
             elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
-                msg = ("danger", "Word・Excel・PowerPointはアップロードできません。PDF・画像に変換してください。")
+                msg = ("danger", "Word・Excel・PowerPointはアップロードできません。")
             else:
                 month_num = MONTHS.index(month) + 1
                 original  = file.filename
@@ -378,19 +373,21 @@ def admin_dashboard():
                 public_id = make_public_id("shiryo", month_num, base_name)
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
-                    cloudinary.uploader.upload(
+                    result = cloudinary.uploader.upload(
                         file,
                         public_id=public_id,
+                        folder="",
                         resource_type=resource_type,
                         use_filename=False,
                         unique_filename=False,
                         overwrite=True
                     )
+                    print("UPLOAD RESULT public_id: " + str(result.get("public_id")))
                     cfg.setdefault("file_meta", {})[save_name] = {
                         "watermark": watermark, "download": download, "print": allow_print,
                     }
                     save_config(cfg)
-                    msg = ("success", month + "に資料「" + original + "」をアップロードしました")
+                    msg = ("success", month + "に資料をアップロードしました")
                 except Exception as e:
                     msg = ("danger", "アップロードエラー: " + str(e))
 
@@ -409,15 +406,17 @@ def admin_dashboard():
                 save_name = "{:02d}_".format(month_num) + base_name + ".pdf"
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
-                    cloudinary.uploader.upload(
+                    result = cloudinary.uploader.upload(
                         file,
                         public_id=public_id,
+                        folder="",
                         resource_type="raw",
                         use_filename=False,
                         unique_filename=False,
                         overwrite=True
                     )
-                    msg = ("success", month + "に議事録「" + original + "」をアップロードしました")
+                    print("UPLOAD RESULT public_id: " + str(result.get("public_id")))
+                    msg = ("success", month + "に議事録をアップロードしました")
                 except Exception as e:
                     msg = ("danger", "アップロードエラー: " + str(e))
 
@@ -431,7 +430,7 @@ def admin_dashboard():
                 cloudinary.uploader.destroy(public_id, resource_type=resource_type)
                 cfg.get("file_meta", {}).pop(fname, None)
                 save_config(cfg)
-                msg = ("success", "資料「" + get_display_name(fname) + "」を削除しました")
+                msg = ("success", "資料を削除しました")
             except Exception as e:
                 msg = ("danger", "削除エラー: " + str(e))
 
@@ -441,7 +440,7 @@ def admin_dashboard():
             public_id = "jichikai/gijiroku/" + base
             try:
                 cloudinary.uploader.destroy(public_id, resource_type="raw")
-                msg = ("success", "議事録「" + get_display_name(fname) + "」を削除しました")
+                msg = ("success", "議事録を削除しました")
             except Exception as e:
                 msg = ("danger", "削除エラー: " + str(e))
 
@@ -474,15 +473,13 @@ def admin_dashboard():
             if not name:
                 msg = ("danger", "名前を入力してください")
             elif name in cfg["kyogiin_users"]:
-                msg = ("danger", "「" + name + "」はすでに登録されています")
+                msg = ("danger", "既に登録されています")
             elif pw != conf_pw:
                 msg = ("danger", "確認用パスワードが一致しません")
             else:
-                cfg["kyogiin_users"][name] = {
-                    "password_hash": generate_password_hash(pw), "active": True
-                }
+                cfg["kyogiin_users"][name] = {"password_hash": generate_password_hash(pw), "active": True}
                 save_config(cfg)
-                msg = ("success", "協議員「" + name + "」を追加しました")
+                msg = ("success", "協議員を追加しました")
 
         elif action == "change_kyogiin_pw":
             name    = request.form.get("user_name", "").strip()
@@ -495,7 +492,7 @@ def admin_dashboard():
             else:
                 cfg["kyogiin_users"][name]["password_hash"] = generate_password_hash(pw)
                 save_config(cfg)
-                msg = ("success", "「" + name + "」のパスワードを変更しました")
+                msg = ("success", "パスワードを変更しました")
 
         elif action == "toggle_kyogiin":
             name = request.form.get("user_name", "").strip()
@@ -503,14 +500,14 @@ def admin_dashboard():
                 cur = cfg["kyogiin_users"][name].get("active", True)
                 cfg["kyogiin_users"][name]["active"] = not cur
                 save_config(cfg)
-                msg = ("success", "「" + name + "」を" + ("有効" if not cur else "無効") + "にしました")
+                msg = ("success", "変更しました")
 
         elif action == "delete_kyogiin":
             name = request.form.get("user_name", "").strip()
             if name in cfg["kyogiin_users"]:
                 del cfg["kyogiin_users"][name]
                 save_config(cfg)
-                msg = ("success", "協議員「" + name + "」を削除しました")
+                msg = ("success", "削除しました")
 
         elif action == "add_admin1":
             name    = request.form.get("new_name", "").strip()
@@ -519,15 +516,13 @@ def admin_dashboard():
             if not name:
                 msg = ("danger", "名前を入力してください")
             elif name in cfg.get("admin1_users", {}):
-                msg = ("danger", "「" + name + "」はすでに登録されています")
+                msg = ("danger", "既に登録されています")
             elif pw != conf_pw:
                 msg = ("danger", "確認用パスワードが一致しません")
             else:
-                cfg.setdefault("admin1_users", {})[name] = {
-                    "password_hash": generate_password_hash(pw), "active": True
-                }
+                cfg.setdefault("admin1_users", {})[name] = {"password_hash": generate_password_hash(pw), "active": True}
                 save_config(cfg)
-                msg = ("success", "ランク1管理者「" + name + "」を追加しました")
+                msg = ("success", "ランク1管理者を追加しました")
 
         elif action == "toggle_admin1":
             name = request.form.get("user_name", "").strip()
@@ -535,14 +530,14 @@ def admin_dashboard():
                 cur = cfg["admin1_users"][name].get("active", True)
                 cfg["admin1_users"][name]["active"] = not cur
                 save_config(cfg)
-                msg = ("success", "「" + name + "」を" + ("有効" if not cur else "無効") + "にしました")
+                msg = ("success", "変更しました")
 
         elif action == "delete_admin1":
             name = request.form.get("user_name", "").strip()
             if name in cfg.get("admin1_users", {}):
                 del cfg["admin1_users"][name]
                 save_config(cfg)
-                msg = ("success", "ランク1管理者「" + name + "」を削除しました")
+                msg = ("success", "削除しました")
 
         elif action == "change_admin2_pw":
             cur_pw  = request.form.get("current_password", "").strip()
@@ -555,7 +550,7 @@ def admin_dashboard():
             else:
                 cfg["admin2_password_hash"] = generate_password_hash(new_pw)
                 save_config(cfg)
-                msg = ("success", "ランク2パスワードを変更しました")
+                msg = ("success", "パスワードを変更しました")
 
         cfg = load_config()
 
@@ -581,9 +576,7 @@ def admin_download_config():
     data = json.dumps(cfg, ensure_ascii=False, indent=2)
     buf  = io.BytesIO(data.encode("utf-8"))
     buf.seek(0)
-    return send_file(buf, as_attachment=True,
-                     download_name="jichikai_config_backup.json",
-                     mimetype="application/json")
+    return send_file(buf, as_attachment=True, download_name="jichikai_config_backup.json", mimetype="application/json")
 
 @app.route("/admin/upload_config", methods=["POST"])
 def admin_upload_config():
