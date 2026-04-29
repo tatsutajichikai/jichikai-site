@@ -381,7 +381,12 @@ def admin_dashboard():
                 base_name = strip_month_prefix(base_name)
                 save_name = "{:02d}_".format(month_num) + base_name + ("." + ext if ext else "")
                 public_id = make_public_id("shiryo", month_num, base_name)
-                resource_type = "image" if ext in IMAGE_EXTS else "raw"
+                if ext == "pdf":
+                    resource_type = "image"
+                elif ext in IMAGE_EXTS:
+                    resource_type = "image"
+                else:
+                    resource_type = "raw"
                 try:
                     cloudinary.uploader.upload(
                         file.stream,  # ← ここ重要
@@ -418,10 +423,10 @@ def admin_dashboard():
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
                     cloudinary.uploader.upload(
-                        file.stream,
+                        file,
                         public_id="{:02d}_{}".format(month_num, base_name),
                         folder="jichikai/gijiroku",
-                        resource_type="raw",
+                        resource_type="image",  # ←ここ変更
                         format="pdf",
                         filename=original,  # ← 必須
                         use_filename=True,
@@ -436,7 +441,12 @@ def admin_dashboard():
             fname         = request.form.get("filename", "")
             ext           = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
             base          = fname.rsplit(".", 1)[0] if "." in fname else fname
-            resource_type = "image" if ext in IMAGE_EXTS else "raw"
+            if ext == "pdf":
+                resource_type = "image"
+            elif ext in IMAGE_EXTS:
+                resource_type = "image"
+            else:
+                resource_type = "raw"
             public_id     = "jichikai/shiryo/" + base
             try:
                 cloudinary.uploader.destroy(public_id, resource_type=resource_type)
