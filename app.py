@@ -385,12 +385,11 @@ def admin_dashboard():
                 try:
                     cloudinary.uploader.upload(
                         file,
-                        public_id="{:02d}_{}".format(month_num, base_name),
-                        folder="jichikai/gijiroku",
+                        public_id=f"jichikai/gijiroku/{month_num:02d}_{base_name}",
                         resource_type="raw",
                         format="pdf",
-                        type="upload",              # ←追加（公開）
-                        access_mode="public",       # ←追加（これ重要）
+                        access_mode="public",
+                        type="upload",
                         use_filename=False,
                         unique_filename=False,
                         overwrite=True
