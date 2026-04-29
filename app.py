@@ -149,13 +149,12 @@ def get_cloudinary_url(folder_type, fname):
         base = fname
         ext  = ""
     public_id = "jichikai/" + folder_type + "/" + base
-    resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    if ext == "pdf":
-        url = f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.pdf"
-    elif resource_type == "raw":
-        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
-    else:
+    if ext in IMAGE_EXTS:
+        # 画像はimage/upload
         url, _ = cloudinary_url(public_id, resource_type="image")
+    else:
+        # PDF等rawファイルはraw/upload
+        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
     return url
 
 def get_display_name(fname):
@@ -254,6 +253,10 @@ def kyogiin_view_file(file_type, filename):
         "watermark": True, "download": False, "print": False
     }
     ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
+
+    # ★ Cloudinaryの直接URLを生成（リダイレクトなし）
+    cloudinary_direct_url = get_cloudinary_url(file_type, safe)
+
     file_url     = url_for("kyogiin_raw_file", file_type=file_type, filename=safe)
     file_url_abs = request.host_url.rstrip("/") + file_url
     return render_template(
@@ -261,7 +264,7 @@ def kyogiin_view_file(file_type, filename):
         company=JICHIKAI, filename=safe,
         display_name=get_display_name(safe),
         user_name=session.get("kyogiin_name", ""),
-        file_url=file_url,
+        file_url=cloudinary_direct_url,      # ★ 直接URLに変更
         file_url_abs=file_url_abs,
         file_ext=ext,
         watermark=meta["watermark"],
