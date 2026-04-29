@@ -50,6 +50,10 @@ def safe_public_id(name):
     name = name.replace("/", "_").replace("\\", "_")
     return name
 
+def strip_month_prefix(name):
+    """先頭の月番号プレフィックス(例: 01_)を除去する"""
+    return re.sub(r"^\d{1,2}_", "", name)
+
 def make_public_id(folder_type, month_num, base_name):
     """
     Cloudinaryのpublic_idをフォルダ構造付きで生成
@@ -131,10 +135,8 @@ def get_files_by_month(folder_type):
                 for r in res.get("resources", []):
                     public_id = r["public_id"]
                     # フォルダ部分を除いたファイル名部分を取得
-                    # 例: jichikai/shiryo/01_ファイル名 → 01_ファイル名
                     base_name = public_id.split("/")[-1]
                     fmt = r.get("format", "")
-                    # formatが空でない場合のみ拡張子を付ける
                     fname = f"{base_name}.{fmt}" if fmt else base_name
                     # 月番号を先頭から取得
                     prefix_num = base_name.split("_")[0]
@@ -158,7 +160,6 @@ def get_cloudinary_url(folder_type, fname):
     public_id     = f"jichikai/{folder_type}/{base}"
     resource_type = "image" if ext in IMAGE_EXTS else "raw"
     if resource_type == "raw":
-        # PDFなどrawファイル：fl_attachment:falseでインライン表示を試みる
         url = (
             f"https://res.cloudinary.com/{cloud_name}"
             f"/raw/upload/fl_attachment:false/{public_id}.{ext}"
@@ -392,11 +393,13 @@ def admin_dashboard():
             elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
                 msg = ("danger", "Word・Excel・PowerPointはアップロードできません。PDF・画像に変換してください。")
             else:
-                month_num     = MONTHS.index(month) + 1
-                original      = file.filename
-                ext           = original.rsplit(".", 1)[-1].lower() if "." in original else ""
-                base_name     = original.rsplit(".", 1)[0] if "." in original else original
-                save_name     = f"{month_num:02d}_{original}"
+                month_num = MONTHS.index(month) + 1
+                original  = file.filename
+                ext       = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+                base_name = original.rsplit(".", 1)[0] if "." in original else original
+                # 既に月番号プレフィックスが付いている場合は除去
+                base_name = strip_month_prefix(base_name)
+                save_name     = f"{month_num:02d}_{base_name}.{ext}" if ext else f"{month_num:02d}_{base_name}"
                 public_id     = make_public_id("shiryo", month_num, base_name)
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
@@ -427,7 +430,9 @@ def admin_dashboard():
                 month_num = MONTHS.index(month) + 1
                 original  = file.filename
                 base_name = original.rsplit(".", 1)[0] if "." in original else original
-                save_name = f"{month_num:02d}_{original}"
+                # 既に月番号プレフィックスが付いている場合は除去
+                base_name = strip_month_prefix(base_name)
+                save_name = f"{month_num:02d}_{base_name}.pdf"
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
                     cloudinary.uploader.upload(
