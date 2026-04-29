@@ -385,11 +385,9 @@ def admin_dashboard():
                 try:
                     cloudinary.uploader.upload(
                         file,
-                        public_id=f"jichikai/gijiroku/{month_num:02d}_{base_name}",
-                        resource_type="raw",
-                        format="pdf",
-                        access_mode="public",
-                        type="upload",
+                        public_id=f"{month_num:02d}_{base_name}",
+                        folder="jichikai/shiryo",
+                        resource_type=resource_type,
                         use_filename=False,
                         unique_filename=False,
                         overwrite=True
@@ -417,12 +415,11 @@ def admin_dashboard():
                 save_name = "{:02d}_".format(month_num) + base_name + ".pdf"
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
-                    upload_options = dict(
-                        public_id="{:02d}_{}".format(month_num, base_name),
-                        folder="jichikai/shiryo",
-                        resource_type=resource_type,
-                        type="upload",              # ←追加
-                        access_mode="public",       # ←追加
+                    cloudinary.uploader.upload(
+                        file,
+                        public_id=f"{month_num:02d}_{base_name}",
+                        folder="jichikai/gijiroku",
+                        resource_type="raw",
                         use_filename=False,
                         unique_filename=False,
                         overwrite=True
