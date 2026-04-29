@@ -232,8 +232,11 @@
       ctx.restore();
     }
 
-    pdfjsLib.getDocument("{{ file_url }}").promise.then(function(doc) {
-      const container = document.getElementById('pdf-pages');
+    pdfjsLib.getDocument({
+      url: "{{ file_url }}",
+      withCredentials: false
+    }).promise.then(function(doc) {
+       const container = document.getElementById('pdf-pages');
       for (let i = 1; i <= doc.numPages; i++) {
         doc.getPage(i).then(function(page) {
           const wrapper = document.createElement('div');

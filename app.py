@@ -126,11 +126,7 @@ def get_files_by_month(folder_type):
                     public_id = r["public_id"]
                     base_name = public_id.split("/")[-1]
                     fmt = r.get("format", "")
-                    if not fmt:
-                        if r.get("resource_type") == "raw":
-                            fmt = "pdf"
-
-                    fname = base_name + "." + fmt
+                    fname = base_name + "." + fmt if fmt else base_name
                     prefix_num = base_name.split("_")[0]
                     if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
                         result[str(int(prefix_num)) + "月"].append(fname)
