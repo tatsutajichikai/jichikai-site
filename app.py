@@ -51,9 +51,7 @@ def strip_month_prefix(name):
 
 def make_public_id(folder_type, month_num, base_name):
     safe_base = safe_public_id(base_name)
-    result = "jichikai/" + folder_type + "/" + "{:02d}".format(month_num) + "_" + safe_base
-    print("DEBUG make_public_id: folder_type=" + folder_type + " result=" + result)
-    return result
+    return "jichikai/" + folder_type + "/" + "{:02d}".format(month_num) + "_" + safe_base
 
 def load_config():
     default = {
@@ -149,7 +147,7 @@ def get_cloudinary_url(folder_type, fname):
     public_id = "jichikai/" + folder_type + "/" + base
     resource_type = "image" if ext in IMAGE_EXTS else "raw"
     if resource_type == "raw":
-        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/fl_attachment:false/" + public_id + "." + ext
+        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/" + public_id + "." + ext
     else:
         url, _ = cloudinary_url(public_id, resource_type="image")
     return url
@@ -376,9 +374,8 @@ def admin_dashboard():
                 ext       = original.rsplit(".", 1)[-1].lower() if "." in original else ""
                 base_name = original.rsplit(".", 1)[0] if "." in original else original
                 base_name = strip_month_prefix(base_name)
-                save_name     = base_name + "." + ext if ext else base_name
-                save_name     = "{:02d}_".format(month_num) + save_name
-                public_id     = make_public_id("shiryo", month_num, base_name)
+                save_name = "{:02d}_".format(month_num) + base_name + ("." + ext if ext else "")
+                public_id = make_public_id("shiryo", month_num, base_name)
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
                     cloudinary.uploader.upload(
