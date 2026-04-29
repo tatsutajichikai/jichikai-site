@@ -401,6 +401,8 @@ def admin_dashboard():
                 base_name = strip_month_prefix(base_name)
                 save_name     = f"{month_num:02d}_{base_name}.{ext}" if ext else f"{month_num:02d}_{base_name}"
                 public_id     = make_public_id("shiryo", month_num, base_name)
+                # ↓ デバッグ用（確認後に削除）
+                print(f"DEBUG upload_gijiroku: original={original}, base_name={base_name}, public_id={public_id}")
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
                     cloudinary.uploader.upload(
@@ -434,6 +436,8 @@ def admin_dashboard():
                 base_name = strip_month_prefix(base_name)
                 save_name = f"{month_num:02d}_{base_name}.pdf"
                 public_id = make_public_id("gijiroku", month_num, base_name)
+                # ↓ デバッグ用（確認後に削除）
+                print(f"DEBUG upload_gijiroku: original={original}, base_name={base_name}, public_id={public_id}")
                 try:
                     cloudinary.uploader.upload(
                         file,
