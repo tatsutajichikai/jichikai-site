@@ -51,7 +51,9 @@ def strip_month_prefix(name):
 
 def make_public_id(folder_type, month_num, base_name):
     safe_base = safe_public_id(base_name)
-    return "jichikai/" + folder_type + "/" + "{:02d}".format(month_num) + "_" + safe_base
+    result = "jichikai/" + folder_type + "/" + "{:02d}".format(month_num) + "_" + safe_base
+    print("DEBUG make_public_id: folder_type=" + folder_type + " result=" + result)
+    return result
 
 def load_config():
     default = {
@@ -145,12 +147,11 @@ def get_cloudinary_url(folder_type, fname):
         base = fname
         ext  = ""
     public_id = "jichikai/" + folder_type + "/" + base
-    if ext in IMAGE_EXTS:
-        # 画像はimage/upload
-        url, _ = cloudinary_url(public_id, resource_type="image")
+    resource_type = "image" if ext in IMAGE_EXTS else "raw"
+    if resource_type == "raw":
+        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/fl_attachment:false/" + public_id + "." + ext
     else:
-        # PDF等rawファイルはraw/upload
-        url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
+        url, _ = cloudinary_url(public_id, resource_type="image")
     return url
 
 def get_display_name(fname):
@@ -249,10 +250,6 @@ def kyogiin_view_file(file_type, filename):
         "watermark": True, "download": False, "print": False
     }
     ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
-
-    # ★ Cloudinaryの直接URLを生成（リダイレクトなし）
-    cloudinary_direct_url = get_cloudinary_url(file_type, safe)
-
     file_url     = url_for("kyogiin_raw_file", file_type=file_type, filename=safe)
     file_url_abs = request.host_url.rstrip("/") + file_url
     return render_template(
@@ -260,7 +257,7 @@ def kyogiin_view_file(file_type, filename):
         company=JICHIKAI, filename=safe,
         display_name=get_display_name(safe),
         user_name=session.get("kyogiin_name", ""),
-        file_url=cloudinary_direct_url,      # ★ 直接URLに変更
+        file_url=file_url,
         file_url_abs=file_url_abs,
         file_ext=ext,
         watermark=meta["watermark"],
@@ -379,23 +376,17 @@ def admin_dashboard():
                 ext       = original.rsplit(".", 1)[-1].lower() if "." in original else ""
                 base_name = original.rsplit(".", 1)[0] if "." in original else original
                 base_name = strip_month_prefix(base_name)
-                save_name = "{:02d}_".format(month_num) + base_name + ("." + ext if ext else "")
-                public_id = make_public_id("shiryo", month_num, base_name)
-                if ext == "pdf":
-                    resource_type = "image"
-                elif ext in IMAGE_EXTS:
-                    resource_type = "image"
-                else:
-                    resource_type = "raw"
+                save_name     = base_name + "." + ext if ext else base_name
+                save_name     = "{:02d}_".format(month_num) + save_name
+                public_id     = make_public_id("shiryo", month_num, base_name)
+                resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
                     cloudinary.uploader.upload(
-                        file.stream,  # ← ここ重要
+                        file,
                         public_id="{:02d}_{}".format(month_num, base_name),
                         folder="jichikai/shiryo",
-                        resource_type="raw" if ext == "pdf" else "image",
-                        format=ext,  # ← 必須
-                        filename=original,  # ← ★これが超重要
-                        use_filename=True,
+                        resource_type=resource_type,
+                        use_filename=False,
                         unique_filename=False,
                         overwrite=True
                     )
@@ -426,10 +417,8 @@ def admin_dashboard():
                         file,
                         public_id="{:02d}_{}".format(month_num, base_name),
                         folder="jichikai/gijiroku",
-                        resource_type="image",  # ←ここ変更
-                        format="pdf",
-                        filename=original,  # ← 必須
-                        use_filename=True,
+                        resource_type="raw",
+                        use_filename=False,
                         unique_filename=False,
                         overwrite=True
                     )
@@ -441,12 +430,7 @@ def admin_dashboard():
             fname         = request.form.get("filename", "")
             ext           = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
             base          = fname.rsplit(".", 1)[0] if "." in fname else fname
-            if ext == "pdf":
-                resource_type = "image"
-            elif ext in IMAGE_EXTS:
-                resource_type = "image"
-            else:
-                resource_type = "raw"
+            resource_type = "image" if ext in IMAGE_EXTS else "raw"
             public_id     = "jichikai/shiryo/" + base
             try:
                 cloudinary.uploader.destroy(public_id, resource_type=resource_type)
