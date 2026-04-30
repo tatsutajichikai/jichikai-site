@@ -43,9 +43,6 @@ ALLOWED_GIJIROKU = {"pdf"}
 BLOCKED_SHIRYO   = {"docx", "xlsx", "pptx", "doc", "xls", "ppt"}
 IMAGE_EXTS       = {"jpg", "jpeg", "png", "gif", "webp"}
 
-def safe_public_id(name):
-    return name.replace("/", "_").replace("\\", "_")
-
 def strip_month_prefix(name):
     return re.sub(r"^\d{1,2}_", "", name)
 
@@ -74,7 +71,6 @@ def save_config(cfg):
 def allowed_gijiroku(fn):
     return "." in fn and fn.rsplit(".", 1)[1].lower() in ALLOWED_GIJIROKU
 
-# 自治会基本情報
 JICHIKAI = {
     "name": "立田自治会",
     "tagline": "明るく楽しい元気な立田町",
@@ -105,11 +101,9 @@ JICHIKAI = {
 MONTHS = [str(i) + "月" for i in range(1, 13)]
 
 def get_files_by_month(folder_type):
-    """Cloudinaryからファイルを取得。画像・PDFの拡張子を確実に復元する。"""
     result = {m: [] for m in MONTHS}
     prefix = f"jichikai/{folder_type}/"
     try:
-        # image(画像/PDF)とraw(その他)の両方をスキャン
         for r_type in ["image", "raw"]:
             res = cloudinary.api.resources(
                 type="upload",
@@ -119,44 +113,33 @@ def get_files_by_month(folder_type):
             )
             for r in res.get("resources", []):
                 public_id = r["public_id"]
-                # フォルダ名を除去した純粋なファイル名部分を取得
                 base_name = public_id.split("/")[-1]
-                
-                # CloudinaryのAPIが返すフォーマット(png, pdf等)を取得
                 fmt = r.get("format", "")
                 
-                # 拡張子の復元ロジックを強化
                 if "." in base_name:
                     fname = base_name
                 elif fmt:
-                    # public_idに拡張子が含まれていない場合、formatを結合する
                     fname = f"{base_name}.{fmt.lower()}"
                 else:
                     fname = base_name
 
-                # 月別フォルダへの振り分け
                 prefix_num = base_name.split("_")[0]
                 if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
                     month_key = str(int(prefix_num)) + "月"
                     if fname not in result[month_key]:
                         result[month_key].append(fname)
     except Exception as e:
-        print(f"Cloudinary list error ({folder_type}): {e}")
+        print(f"Cloudinary list error: {e}")
     return result
 
 def get_cloudinary_url(folder_type, fname):
-    """画像・PDFを 'image' リソースとして正しく構築するURL生成"""
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
     if "." in fname:
         base, ext = fname.rsplit(".", 1)
         ext = ext.lower()
     else:
         base, ext = fname, ""
-        
-    # Cloudinary上のパス
     public_id = f"jichikai/{folder_type}/{base}"
-    
-    # PDFおよび画像は、image/upload/public_id.ext の形式でないと表示できない場合がある
     if ext == "pdf" or ext in IMAGE_EXTS:
         return f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.{ext}"
     else:
@@ -219,6 +202,29 @@ def kyogiin_files(month):
         get_display_name=get_display_name,
     )
 
+@app.route("/kyogiin/change_password", methods=["GET", "POST"])
+def kyogiin_change_password():
+    if not session.get("kyogiin_logged_in"):
+        return redirect(url_for("kyogiin"))
+    user_name = session.get("kyogiin_name", "")
+    msg = None
+    if request.method == "POST":
+        cfg = load_config()
+        cur_pw = request.form.get("current_password", "").strip()
+        new_pw = request.form.get("new_password", "").strip()
+        conf_pw = request.form.get("confirm_password", "").strip()
+        if not check_password_hash(cfg["kyogiin_users"][user_name]["password_hash"], cur_pw):
+            msg = ("danger", "現在のパスワードが違います")
+        elif len(new_pw) < 4:
+            msg = ("danger", "パスワードは4文字以上で入力してください")
+        elif new_pw != conf_pw:
+            msg = ("danger", "確認用パスワードが一致しません")
+        else:
+            cfg["kyogiin_users"][user_name]["password_hash"] = generate_password_hash(new_pw)
+            save_config(cfg)
+            msg = ("success", "パスワードを変更しました")
+    return render_template("kyogiin_change_password.html", company=JICHIKAI, user_name=user_name, msg=msg)
+
 @app.route("/kyogiin/view/<file_type>/<path:filename>")
 def kyogiin_view_file(file_type, filename):
     if not session.get("kyogiin_logged_in"):
@@ -247,98 +253,6 @@ def kyogiin_raw_file(file_type, filename):
         if request.args.get("dl") == "1" and not meta["download"]: abort(403)
     return redirect(get_cloudinary_url(file_type, safe))
 
-@app.route("/admin/dashboard", methods=["GET", "POST"])
-def admin_dashboard():
-    if admin_rank() < 1: return redirect(url_for("admin_login"))
-    cfg = load_config()
-    msg = None
-
-    if request.method == "POST":
-        action = request.form.get("action")
-        if action == "upload_shiryo":
-            month = request.form.get("month", "1月")
-            file = request.files.get("file")
-            watermark, download, allow_print = request.form.get("watermark") == "1", request.form.get("download") == "1", request.form.get("print") == "1"
-            if not file or file.filename == "":
-                msg = ("danger", "ファイル未選択")
-            elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
-                msg = ("danger", "PDF化してください")
-            else:
-                month_num = MONTHS.index(month) + 1
-                original_filename = file.filename
-                ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
-                base_name = strip_month_prefix(original_filename.rsplit(".", 1)[0])
-                
-                # Cloudinary保存用ID（拡張子なしで管理）
-                public_id_base = "{:02d}_{}".format(month_num, base_name)
-                # 重要：画像とPDFは'image'、それ以外は'raw'
-                resource_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
-                # config.json保存用（拡張子あり）
-                save_name = f"{public_id_base}.{ext}" if ext else public_id_base
-
-                try:
-                    cloudinary.uploader.upload(
-                        file, 
-                        public_id=public_id_base, 
-                        folder="jichikai/shiryo", 
-                        resource_type=resource_type, 
-                        use_filename=True, 
-                        unique_filename=False, 
-                        overwrite=True
-                    )
-                    cfg.setdefault("file_meta", {})[save_name] = {"watermark": watermark, "download": download, "print": allow_print}
-                    save_config(cfg)
-                    msg = ("success", f"{month}に資料「{original_filename}」をアップロードしました")
-                except Exception as e:
-                    msg = ("danger", f"失敗: {e}")
-
-        elif action == "upload_gijiroku":
-            month = request.form.get("month", "1月")
-            file = request.files.get("file")
-            if not file or not allowed_gijiroku(file.filename):
-                msg = ("danger", "PDFのみ")
-            else:
-                month_num = MONTHS.index(month) + 1
-                original_filename = file.filename
-                base_name = strip_month_prefix(original_filename.rsplit(".", 1)[0])
-                try:
-                    cloudinary.uploader.upload(
-                        file, 
-                        public_id="{:02d}_{}".format(month_num, base_name), 
-                        folder="jichikai/gijiroku", 
-                        resource_type="image", # PDFはimage扱い
-                        use_filename=True, 
-                        unique_filename=False, 
-                        overwrite=True
-                    )
-                    msg = ("success", f"{month}に議事録「{original_filename}」をアップロードしました")
-                except Exception as e:
-                    msg = ("danger", f"失敗: {e}")
-
-        elif action == "delete_shiryo":
-            fname = request.form.get("filename", "")
-            base = fname.rsplit(".", 1)[0] if "." in fname else fname
-            ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-            r_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
-            try:
-                cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type=r_type)
-                cfg.get("file_meta", {}).pop(fname, None)
-                save_config(cfg)
-                msg = ("success", "削除しました")
-            except Exception as e: msg = ("danger", f"失敗: {e}")
-
-        # その他管理機能（略さず維持）
-        elif action == "add_kyogiin":
-            name, pw, conf_pw = request.form.get("new_name", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
-            if name and pw == conf_pw:
-                cfg["kyogiin_users"][name] = {"password_hash": generate_password_hash(pw), "active": True}
-                save_config(cfg)
-                msg = ("success", "追加成功")
-
-        cfg = load_config()
-    return render_template("admin_dashboard.html", company=JICHIKAI, months=MONTHS, shiryo_by_month=get_files_by_month("shiryo"), gijiroku_by_month=get_files_by_month("gijiroku"), kyogiin_users=cfg.get("kyogiin_users", {}), admin1_users=cfg.get("admin1_users", {}), file_meta=cfg.get("file_meta", {}), admin_rank=admin_rank(), admin_name=session.get("admin_name", ""), msg=msg, get_display_name=get_display_name)
-
-# 以下のログイン・設定保存などのルートは変更なし
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if admin_rank() >= 1: return redirect(url_for("admin_dashboard"))
@@ -357,6 +271,87 @@ def admin_login():
 def admin_logout():
     session.clear()
     return redirect(url_for("index"))
+
+@app.route("/admin/dashboard", methods=["GET", "POST"])
+def admin_dashboard():
+    if admin_rank() < 1: return redirect(url_for("admin_login"))
+    cfg = load_config()
+    msg = None
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "upload_shiryo":
+            month = request.form.get("month", "1月")
+            file = request.files.get("file")
+            watermark, download, allow_print = request.form.get("watermark") == "1", request.form.get("download") == "1", request.form.get("print") == "1"
+            if not file or file.filename == "":
+                msg = ("danger", "ファイル未選択")
+            elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
+                msg = ("danger", "PDF化してください")
+            else:
+                month_num = MONTHS.index(month) + 1
+                orig = file.filename
+                ext = orig.rsplit(".", 1)[-1].lower() if "." in orig else ""
+                base = strip_month_prefix(orig.rsplit(".", 1)[0])
+                p_id = "{:02d}_{}".format(month_num, base)
+                r_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
+                s_name = f"{p_id}.{ext}" if ext else p_id
+                try:
+                    cloudinary.uploader.upload(file, public_id=p_id, folder="jichikai/shiryo", resource_type=r_type, use_filename=True, unique_filename=False, overwrite=True)
+                    cfg.setdefault("file_meta", {})[s_name] = {"watermark": watermark, "download": download, "print": allow_print}
+                    save_config(cfg)
+                    msg = ("success", f"{month}に資料「{orig}」をアップロードしました")
+                except Exception as e: msg = ("danger", f"失敗: {e}")
+        elif action == "upload_gijiroku":
+            month = request.form.get("month", "1月")
+            file = request.files.get("file")
+            if not file or not allowed_gijiroku(file.filename): msg = ("danger", "PDFのみ")
+            else:
+                month_num = MONTHS.index(month) + 1
+                orig = file.filename
+                base = strip_month_prefix(orig.rsplit(".", 1)[0])
+                try:
+                    cloudinary.uploader.upload(file, public_id="{:02d}_{}".format(month_num, base), folder="jichikai/gijiroku", resource_type="image", use_filename=True, unique_filename=False, overwrite=True)
+                    msg = ("success", f"{month}に議事録「{orig}」をアップロードしました")
+                except Exception as e: msg = ("danger", f"失敗: {e}")
+        elif action == "delete_shiryo":
+            fname = request.form.get("filename", "")
+            base = fname.rsplit(".", 1)[0] if "." in fname else fname
+            ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+            r_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
+            try:
+                cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type=r_type)
+                cfg.get("file_meta", {}).pop(fname, None)
+                save_config(cfg)
+                msg = ("success", "削除しました")
+            except Exception as e: msg = ("danger", f"失敗: {e}")
+        elif action == "delete_gijiroku":
+            fname = request.form.get("filename", "")
+            base = fname.rsplit(".", 1)[0] if "." in fname else fname
+            try:
+                cloudinary.uploader.destroy(f"jichikai/gijiroku/{base}", resource_type="image")
+                msg = ("success", "削除しました")
+            except Exception as e: msg = ("danger", f"失敗: {e}")
+        elif admin_rank() == 2:
+            if action == "add_kyogiin":
+                name, pw, cpw = request.form.get("new_name", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
+                if name and pw == cpw:
+                    cfg["kyogiin_users"][name] = {"password_hash": generate_password_hash(pw), "active": True}
+                    save_config(cfg)
+                    msg = ("success", "追加成功")
+            elif action == "toggle_kyogiin":
+                name = request.form.get("user_name", "")
+                if name in cfg["kyogiin_users"]:
+                    cfg["kyogiin_users"][name]["active"] = not cfg["kyogiin_users"][name].get("active", True)
+                    save_config(cfg)
+                    msg = ("success", "切替成功")
+            elif action == "delete_kyogiin":
+                name = request.form.get("user_name", "")
+                if name in cfg["kyogiin_users"]:
+                    del cfg["kyogiin_users"][name]
+                    save_config(cfg)
+                    msg = ("success", "削除成功")
+        cfg = load_config()
+    return render_template("admin_dashboard.html", company=JICHIKAI, months=MONTHS, shiryo_by_month=get_files_by_month("shiryo"), gijiroku_by_month=get_files_by_month("gijiroku"), kyogiin_users=cfg.get("kyogiin_users", {}), admin1_users=cfg.get("admin1_users", {}), file_meta=cfg.get("file_meta", {}), admin_rank=admin_rank(), admin_name=session.get("admin_name", ""), msg=msg, get_display_name=get_display_name)
 
 @app.route("/admin/download_config")
 def admin_download_config():
