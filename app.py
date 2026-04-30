@@ -116,43 +116,106 @@ def get_files_by_month(folder_type):
     result = {m: [] for m in MONTHS}
     prefix = "jichikai/" + folder_type + "/"
     try:
-        for resource_type in ["raw", "image"]:
-            try:
-                res = cloudinary.api.resources(
-                    type="upload",
-                    prefix=prefix,
-                    max_results=500,
-                    resource_type=resource_type
-                )
-                for r in res.get("resources", []):
-                    public_id = r["public_id"]
-                    base_name = public_id.split("/")[-1]
-                    fmt = r.get("format", "")
-                    fname = base_name + "." + fmt if fmt else base_name
-                    prefix_num = base_name.split("_")[0]
-                    if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
-                        result[str(int(prefix_num)) + "月"].append(fname)
-            except Exception as e:
-                print("Cloudinary " + resource_type + " list error: " + str(e))
+        # resource_typeを image と raw 両方チェック
+        for r_type in ["image", "raw"]:
+            res = cloudinary.api.resources(
+                type="upload",
+                prefix=prefix,
+                max_results=500,
+                resource_type=r_type
+            )
+            for r in res.get("resources", []):
+                # public_id は "jichikai/shiryo/04_filename" のようになっている
+                public_id = r["public_id"]
+                base_name = public_id.split("/")[-1]
+                
+                # rawの場合は拡張子がpublic_idに含まれていることがあるため調整
+                # 既にドットが含まれていればそのまま、なければformatを付与
+                fmt = r.get("format", "")
+                if "." in base_name:
+                    fname = base_name
+                elif fmt:
+                    fname = base_name + "." + fmt
+                else:
+                    fname = base_name
+
+                prefix_num = base_name.split("_")[0]
+                if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
+                    # 重複を避けて追加
+                    month_key = str(int(prefix_num)) + "月"
+                    if fname not in result[month_key]:
+                        result[month_key].append(fname)
     except Exception as e:
-        print("Cloudinary get_files_by_month error: " + str(e))
+        print("Cloudinary list error: " + str(e))
     return result
 
 def get_cloudinary_url(folder_type, fname):
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
+    
+    # ファイル名と拡張子を分離
     if "." in fname:
-        base = fname.rsplit(".", 1)[0]
-        ext  = fname.rsplit(".", 1)[1].lower()
+        base, ext = fname.rsplit(".", 1)
+        ext = ext.lower()
     else:
-        base = fname
-        ext  = ""
+        base, ext = fname, ""
+        
     public_id = "jichikai/" + folder_type + "/" + base
-    resource_type = "image" if ext in IMAGE_EXTS else "raw"
-    if resource_type == "raw":
-        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/fl_attachment:false/" + public_id + "." + ext
+    
+    # PDFや画像以外（raw）の判定
+    if ext == "pdf" or ext in IMAGE_EXTS:
+        # PDFをブラウザで開くには、resource_type="image" として扱うのがCloudinaryのコツです
+        # (rawだと強制ダウンロードになる場合があるため)
+        if ext == "pdf":
+            # PDFを表示用に最適化する設定
+            return f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.pdf"
+        else:
+            url, _ = cloudinary_url(public_id, resource_type="image")
+            return url
     else:
-        url, _ = cloudinary_url(public_id, resource_type="image")
-    return url
+        # docxなどのその他ファイル
+        return f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
+
+#def get_files_by_month(folder_type):
+#    result = {m: [] for m in MONTHS}
+#    prefix = "jichikai/" + folder_type + "/"
+#    try:
+#        for resource_type in ["raw", "image"]:
+#            try:
+#                res = cloudinary.api.resources(
+#                    type="upload",
+#                    prefix=prefix,
+#                    max_results=500,
+#                    resource_type=resource_type
+#                )
+#                for r in res.get("resources", []):
+#                    public_id = r["public_id"]
+#                    base_name = public_id.split("/")[-1]
+#                    fmt = r.get("format", "")
+#                    fname = base_name + "." + fmt if fmt else base_name
+#                    prefix_num = base_name.split("_")[0]
+#                    if prefix_num.isdigit() and 1 <= int(prefix_num) <= 12:
+#                        result[str(int(prefix_num)) + "月"].append(fname)
+#            except Exception as e:
+#                print("Cloudinary " + resource_type + " list error: " + str(e))
+#    except Exception as e:
+#        print("Cloudinary get_files_by_month error: " + str(e))
+#    return result
+
+#def get_cloudinary_url(folder_type, fname):
+#    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
+#    if "." in fname:
+#        base = fname.rsplit(".", 1)[0]
+#        ext  = fname.rsplit(".", 1)[1].lower()
+#    else:
+#        base = fname
+#        ext  = ""
+#    public_id = "jichikai/" + folder_type + "/" + base
+#    resource_type = "image" if ext in IMAGE_EXTS else "raw"
+#    if resource_type == "raw":
+#        url = "https://res.cloudinary.com/" + cloud_name + "/raw/upload/fl_attachment:false/" + public_id + "." + ext
+#    else:
+#        url, _ = cloudinary_url(public_id, resource_type="image")
+#    return url
 
 def get_display_name(fname):
     parts = fname.split("_", 1)
@@ -381,15 +444,28 @@ def admin_dashboard():
                 public_id     = make_public_id("shiryo", month_num, base_name)
                 resource_type = "image" if ext in IMAGE_EXTS else "raw"
                 try:
+                    # 拡張子を除いたベース名を作成
+                    public_id_base = "{:02d}_{}".format(month_num, base_name)
+    
                     cloudinary.uploader.upload(
                         file,
-                        public_id="{:02d}_{}".format(month_num, base_name),
+                        public_id=public_id_base,
                         folder="jichikai/shiryo",
                         resource_type=resource_type,
-                        use_filename=False,
-                        unique_filename=False,
+                        use_filename=True,     # 元のファイル名を使用する
+                        unique_filename=False, # 勝手にランダムな文字列を付けない
                         overwrite=True
                     )
+#                try:
+#                    cloudinary.uploader.upload(
+#                        file,
+#                        public_id="{:02d}_{}".format(month_num, base_name),
+#                        folder="jichikai/shiryo",
+#                        resource_type=resource_type,
+#                        use_filename=False,
+#                        unique_filename=False,
+#                        overwrite=True
+#                    )
                     cfg.setdefault("file_meta", {})[save_name] = {
                         "watermark": watermark, "download": download, "print": allow_print,
                     }
@@ -413,15 +489,27 @@ def admin_dashboard():
                 save_name = "{:02d}_".format(month_num) + base_name + ".pdf"
                 public_id = make_public_id("gijiroku", month_num, base_name)
                 try:
+                    public_id_base = "{:02d}_{}".format(month_num, base_name)
+    
                     cloudinary.uploader.upload(
                         file,
-                        public_id="{:02d}_{}".format(month_num, base_name),
+                        public_id=public_id_base,
                         folder="jichikai/gijiroku",
-                        resource_type="raw",
-                        use_filename=False,
+                        resource_type="raw",   # PDFをrawとして扱う
+                        use_filename=True,
                         unique_filename=False,
                         overwrite=True
                     )
+#                try:
+#                    cloudinary.uploader.upload(
+#                        file,
+#                        public_id="{:02d}_{}".format(month_num, base_name),
+#                        folder="jichikai/gijiroku",
+#                        resource_type="raw",
+#                        use_filename=False,
+#                        unique_filename=False,
+#                        overwrite=True
+#                    )
                     msg = ("success", month + "に議事録「" + original + "」をアップロードしました")
                 except Exception as e:
                     msg = ("danger", "アップロードエラー: " + str(e))
