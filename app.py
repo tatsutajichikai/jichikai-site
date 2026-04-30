@@ -105,10 +105,11 @@ JICHIKAI = {
 MONTHS = [str(i) + "月" for i in range(1, 13)]
 
 def get_files_by_month(folder_type):
-    """Cloudinaryからファイルリストを取得し、拡張子を正しく復元する"""
+    """Cloudinaryからファイルを取得し拡張子を復元。PDF/PNGは'image'、その他は'raw'から取得。"""
     result = {m: [] for m in MONTHS}
     prefix = f"jichikai/{folder_type}/"
     try:
+        # PDFと画像はimage、その他はrawとしてCloudinaryに存在する
         for r_type in ["image", "raw"]:
             res = cloudinary.api.resources(
                 type="upload",
@@ -138,7 +139,7 @@ def get_files_by_month(folder_type):
     return result
 
 def get_cloudinary_url(folder_type, fname):
-    """CloudinaryのURLを生成（PDFと画像を適切に扱う）"""
+    """PDFおよびIMAGE_EXTSに含まれるものはimageリソースとしてURL生成"""
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
     if "." in fname:
         base, ext = fname.rsplit(".", 1)
@@ -148,9 +149,11 @@ def get_cloudinary_url(folder_type, fname):
         
     public_id = f"jichikai/{folder_type}/{base}"
     
+    # 画像とPDFは image/upload 形式のURL
     if ext == "pdf" or ext in IMAGE_EXTS:
         return f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}.{ext}"
     else:
+        # ZIPなどは raw/upload 形式
         return f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
 
 def get_display_name(fname):
@@ -278,26 +281,6 @@ def admin1_login():
         error = "名前またはパスワードが違います"
     return render_template("admin1_login.html", company=JICHIKAI, error=error)
 
-@app.route("/admin/change_password", methods=["GET", "POST"])
-def admin1_change_password():
-    if admin_rank() < 1: return redirect(url_for("admin1_login"))
-    if admin_rank() == 2: return redirect(url_for("admin_dashboard"))
-    admin_name = session.get("admin_name", "")
-    msg = None
-    if request.method == "POST":
-        cfg = load_config()
-        cur_pw, new_pw, conf_pw = request.form.get("current_password", "").strip(), request.form.get("new_password", "").strip(), request.form.get("confirm_password", "").strip()
-        a1 = cfg.get("admin1_users", {})
-        if admin_name not in a1: msg = ("danger", "ユーザーが見つかりません")
-        elif not check_password_hash(a1[admin_name]["password_hash"], cur_pw): msg = ("danger", "現在のパスワードが違います")
-        elif len(new_pw) < 4: msg = ("danger", "パスワードは4文字以上です")
-        elif new_pw != conf_pw: msg = ("danger", "パスワードが一致しません")
-        else:
-            cfg["admin1_users"][admin_name]["password_hash"] = generate_password_hash(new_pw)
-            save_config(cfg)
-            msg = ("success", "変更しました")
-    return render_template("admin1_change_password.html", company=JICHIKAI, admin_name=admin_name, msg=msg)
-
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if admin_rank() >= 1: return redirect(url_for("admin_dashboard"))
@@ -330,34 +313,59 @@ def admin_dashboard():
             month = request.form.get("month", "1月")
             file = request.files.get("file")
             watermark, download, allow_print = request.form.get("watermark") == "1", request.form.get("download") == "1", request.form.get("print") == "1"
-            if not file or file.filename == "": msg = ("danger", "ファイル未選択")
-            elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO: msg = ("danger", "PDF化してください")
+            if not file or file.filename == "":
+                msg = ("danger", "ファイル未選択")
+            elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
+                msg = ("danger", "PDF化してください")
             else:
                 month_num = MONTHS.index(month) + 1
-                original = file.filename
-                ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
-                base_name = strip_month_prefix(original.rsplit(".", 1)[0])
+                original_filename = file.filename
+                ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
+                base_name = strip_month_prefix(original_filename.rsplit(".", 1)[0])
+                
                 public_id_base = "{:02d}_{}".format(month_num, base_name)
-                save_name = f"{public_id_base}.{ext}" if ext else public_id_base
+                # 重要：PDFおよび画像拡張子なら'image'リソースとして扱う
                 resource_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
+                save_name = f"{public_id_base}.{ext}" if ext else public_id_base
+
                 try:
-                    cloudinary.uploader.upload(file, public_id=public_id_base, folder="jichikai/shiryo", resource_type=resource_type, use_filename=True, unique_filename=False, overwrite=True)
+                    cloudinary.uploader.upload(
+                        file, 
+                        public_id=public_id_base, 
+                        folder="jichikai/shiryo", 
+                        resource_type=resource_type, 
+                        use_filename=True, 
+                        unique_filename=False, 
+                        overwrite=True
+                    )
                     cfg.setdefault("file_meta", {})[save_name] = {"watermark": watermark, "download": download, "print": allow_print}
                     save_config(cfg)
-                    msg = ("success", f"{month}にアップロード成功")
-                except Exception as e: msg = ("danger", f"失敗: {e}")
+                    msg = ("success", f"{month}に資料「{original_filename}」をアップロードしました")
+                except Exception as e:
+                    msg = ("danger", f"失敗: {e}")
 
         elif action == "upload_gijiroku":
             month = request.form.get("month", "1月")
             file = request.files.get("file")
-            if not file or not allowed_gijiroku(file.filename): msg = ("danger", "PDFのみ")
+            if not file or not allowed_gijiroku(file.filename):
+                msg = ("danger", "PDFのみ")
             else:
                 month_num = MONTHS.index(month) + 1
-                base_name = strip_month_prefix(file.filename.rsplit(".", 1)[0])
+                original_filename = file.filename
+                base_name = strip_month_prefix(original_filename.rsplit(".", 1)[0])
                 try:
-                    cloudinary.uploader.upload(file, public_id="{:02d}_{}".format(month_num, base_name), folder="jichikai/gijiroku", resource_type="image", use_filename=True, unique_filename=False, overwrite=True)
-                    msg = ("success", "アップロード成功")
-                except Exception as e: msg = ("danger", f"失敗: {e}")
+                    cloudinary.uploader.upload(
+                        file, 
+                        public_id="{:02d}_{}".format(month_num, base_name), 
+                        folder="jichikai/gijiroku", 
+                        resource_type="image", 
+                        use_filename=True, 
+                        unique_filename=False, 
+                        overwrite=True
+                    )
+                    msg = ("success", f"{month}に議事録「{original_filename}」をアップロードしました")
+                except Exception as e:
+                    msg = ("danger", f"失敗: {e}")
 
         elif action == "delete_shiryo":
             fname = request.form.get("filename", "")
@@ -380,15 +388,6 @@ def admin_dashboard():
                 msg = ("success", "削除しました")
             except Exception as e: msg = ("danger", f"失敗: {e}")
 
-        elif action == "change_admin1_pw":
-            name, cur_pw, new_pw, conf_pw = session.get("admin_name", ""), request.form.get("current_password", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
-            a1 = cfg.get("admin1_users", {})
-            if name in a1 and check_password_hash(a1[name]["password_hash"], cur_pw) and new_pw == conf_pw:
-                cfg["admin1_users"][name]["password_hash"] = generate_password_hash(new_pw)
-                save_config(cfg)
-                msg = ("success", "変更成功")
-            else: msg = ("danger", "失敗しました")
-
         elif admin_rank() == 2:
             if action == "add_kyogiin":
                 name, pw, conf_pw = request.form.get("new_name", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
@@ -396,12 +395,6 @@ def admin_dashboard():
                     cfg["kyogiin_users"][name] = {"password_hash": generate_password_hash(pw), "active": True}
                     save_config(cfg)
                     msg = ("success", "追加成功")
-            elif action == "change_kyogiin_pw":
-                name, pw, conf_pw = request.form.get("user_name", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
-                if name in cfg["kyogiin_users"] and pw == conf_pw:
-                    cfg["kyogiin_users"][name]["password_hash"] = generate_password_hash(pw)
-                    save_config(cfg)
-                    msg = ("success", "変更成功")
             elif action == "toggle_kyogiin":
                 name = request.form.get("user_name", "")
                 if name in cfg["kyogiin_users"]:
@@ -414,30 +407,6 @@ def admin_dashboard():
                     del cfg["kyogiin_users"][name]
                     save_config(cfg)
                     msg = ("success", "削除成功")
-            elif action == "add_admin1":
-                name, pw, conf_pw = request.form.get("new_name", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
-                if name and pw == conf_pw:
-                    cfg.setdefault("admin1_users", {})[name] = {"password_hash": generate_password_hash(pw), "active": True}
-                    save_config(cfg)
-                    msg = ("success", "追加成功")
-            elif action == "toggle_admin1":
-                name = request.form.get("user_name", "")
-                if name in cfg.get("admin1_users", {}):
-                    cfg["admin1_users"][name]["active"] = not cfg["admin1_users"][name].get("active", True)
-                    save_config(cfg)
-                    msg = ("success", "切り替え成功")
-            elif action == "delete_admin1":
-                name = request.form.get("user_name", "")
-                if name in cfg.get("admin1_users", {}):
-                    del cfg["admin1_users"][name]
-                    save_config(cfg)
-                    msg = ("success", "削除成功")
-            elif action == "change_admin2_pw":
-                cur_pw, new_pw, conf_pw = request.form.get("current_password", ""), request.form.get("new_password", ""), request.form.get("confirm_password", "")
-                if check_password_hash(cfg["admin2_password_hash"], cur_pw) and new_pw == conf_pw:
-                    cfg["admin2_password_hash"] = generate_password_hash(new_pw)
-                    save_config(cfg)
-                    msg = ("success", "ランク2PW変更成功")
         
         cfg = load_config()
     return render_template("admin_dashboard.html", company=JICHIKAI, months=MONTHS, shiryo_by_month=get_files_by_month("shiryo"), gijiroku_by_month=get_files_by_month("gijiroku"), kyogiin_users=cfg.get("kyogiin_users", {}), admin1_users=cfg.get("admin1_users", {}), file_meta=cfg.get("file_meta", {}), admin_rank=admin_rank(), admin_name=session.get("admin_name", ""), msg=msg, get_display_name=get_display_name)
