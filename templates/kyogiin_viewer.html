@@ -37,15 +37,13 @@
       background: #525659;
     }
 
-    /* PDF表示エリア */
     .pdf-frame {
       width: 100%; height: 100%; border: none;
     }
 
-    /* ウォーターマークの重なり設定 */
     .watermark-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      pointer-events: none; /* 下のPDF操作を邪魔しない */
+      pointer-events: none;
       z-index: 200; overflow: hidden;
     }
     .watermark-text {
@@ -75,17 +73,15 @@
   </div>
 
   <div class="viewer-body">
-    <!-- PDF本体：ブラウザ標準ビューアを使用（数字が確実に出る方式） -->
-    <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
+    <!-- srcの末尾に #view=FitH を追加して横幅に合わせる -->
+    <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0&view=FitH" title="PDF Viewer"></iframe>
 
-    <!-- ウォーターマーク層 -->
     {% if watermark or file_type == 'gijiroku' %}
     <div class="watermark-overlay" id="watermarkOverlay"></div>
     {% endif %}
   </div>
 
   <script>
-    /* 右クリック・ショートカット制限 */
     {% if not allow_print %}
     document.addEventListener("keydown", function(e) {
       if ((e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) || e.key === "F12") {
@@ -95,7 +91,6 @@
     });
     {% endif %}
 
-    /* ウォーターマーク生成 */
     {% if watermark or file_type == 'gijiroku' %}
     (function() {
       const overlay = document.getElementById("watermarkOverlay");
