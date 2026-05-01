@@ -35,16 +35,22 @@
       width: 100%; height: calc(100vh - 52px);
       position: relative;
       background: #525659;
+      display: flex; align-items: center; justify-content: center;
     }
 
-    .pdf-frame {
+    /* PDF/画像 共通のスタイル */
+    .content-frame {
       width: 100%; height: 100%; border: none;
     }
+    .image-content {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain;
+    }
 
+    /* ウォーターマーク層 */
     .watermark-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      pointer-events: none;
-      z-index: 200; overflow: hidden;
+      pointer-events: none; z-index: 200; overflow: hidden;
     }
     .watermark-text {
       position: absolute; white-space: nowrap;
@@ -73,15 +79,31 @@
   </div>
 
   <div class="viewer-body">
-    <!-- srcの末尾に #view=FitH を追加して横幅に合わせる -->
-    <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0&view=FitH" title="PDF Viewer"></iframe>
+    {% if file_ext == 'pdf' %}
+      <!-- PDF表示: 余計なメニューを隠し、横幅を合わせる設定 -->
+      <object class="content-frame" data="{{ file_url }}#toolbar=0&navpanes=0&scrollbar=1&view=FitH" type="application/pdf">
+        <p>PDFを表示できません。<a href="{{ file_url }}">ダウンロード</a>して閲覧してください。</p>
+      </object>
+    {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
+      <!-- 画像表示: 画面内に収まるように調整 -->
+      <img src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
+    {% else %}
+      <div style="color:white; text-align:center;">
+        <p>{{ display_name }}</p>
+        {% if allow_download %}
+        <a href="{{ file_url }}?dl=1" download="{{ display_name }}" style="color:var(--green);">ダウンロードして開く</a>
+        {% endif %}
+      </div>
+    {% endif %}
 
+    <!-- ウォーターマーク -->
     {% if watermark or file_type == 'gijiroku' %}
     <div class="watermark-overlay" id="watermarkOverlay"></div>
     {% endif %}
   </div>
 
   <script>
+    /* 印刷等の制限 */
     {% if not allow_print %}
     document.addEventListener("keydown", function(e) {
       if ((e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) || e.key === "F12") {
@@ -91,6 +113,7 @@
     });
     {% endif %}
 
+    /* ウォーターマーク生成 */
     {% if watermark or file_type == 'gijiroku' %}
     (function() {
       const overlay = document.getElementById("watermarkOverlay");
