@@ -50,7 +50,6 @@
       max-width: 100%; max-height: 100%;
       object-fit: contain; display: block;
     }
-    /* 画像読み込みエラー時のメッセージ */
     .image-area img::after {
       content: "画像を読み込めませんでした";
       display: flex; align-items: center; justify-content: center;
@@ -128,7 +127,7 @@
       <img src="{{ file_url }}" alt="{{ display_name }}"
            onerror="this.style.display='none'; document.getElementById('img-error').style.display='flex';">
       <div id="img-error" style="display:none; flex-direction:column; align-items:center;
-                                  justify-content:center; color:#fff; text-align:center; padding:40px;">
+                                 justify-content:center; color:#fff; text-align:center; padding:40px;">
         <div style="font-size:3rem; margin-bottom:16px;">🖼️</div>
         <p style="font-size:1rem; opacity:.85;">画像を読み込めませんでした</p>
         {% if allow_download %}
@@ -174,16 +173,14 @@
     </div>
     {% endif %}
 
-  </div>{# /viewer-body #}
+  </div>
 
-  {# ── ウォーターマーク（PDF以外） ── #}
   {% if file_ext != 'pdf' %}
   {% if watermark or file_type == 'gijiroku' %}
   <div class="watermark-overlay" id="watermarkOverlay"></div>
   {% endif %}
   {% endif %}
 
-  {# ── pdf.js の読み込みはPDFのみ ── #}
   {% if file_ext == 'pdf' %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   {% endif %}
@@ -206,7 +203,7 @@
       .catch(() => { document.getElementById("textContent").textContent = "読み込みに失敗しました。"; });
     {% endif %}
 
-    /* ── ウォーターマーク生成（PDF以外） ── */
+    /* ── ウォーターマーク生成 ── */
     const userName  = {{ user_name | tojson }};
     const now       = new Date();
     const pad       = n => String(n).padStart(2, "0");
@@ -238,6 +235,10 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+    // CMap(日本語フォント対応)の設定を追加
+    const CMAP_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/";
+    const CMAP_PACKED = true;
+
     {% if watermark or file_type == 'gijiroku' %}
     const showWatermark = true;
     {% else %}
@@ -267,7 +268,9 @@
 
     pdfjsLib.getDocument({
       url: "{{ file_url }}",
-      withCredentials: false
+      withCredentials: false,
+      cMapUrl: CMAP_URL,       // 日本語対応用
+      cMapPacked: CMAP_PACKED  // 日本語対応用
     }).promise.then(function(doc) {
       const container = document.getElementById('pdf-pages');
       for (let i = 1; i <= doc.numPages; i++) {
@@ -287,6 +290,8 @@
               .promise.then(() => drawWatermark(canvas));
         });
       }
+    }).catch(function(err) {
+      console.error("PDF表示エラー:", err);
     });
     {% endif %}
 
