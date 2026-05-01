@@ -85,7 +85,7 @@ JICHIKAI = {
     "meeting_day": "毎月第3土曜日 午後19時30分〜",
     "meeting_place": "集落センター",
     "services": [
-        {"icon": "🏘️", "title": "地域の安全・防犯", "desc": "年末夜間パトロールや防犯灯の管理を行っています。"},
+        {"icon": "🏘️", "title": "地域の安全・防防", "desc": "年末夜間パトロールや防犯灯の管理を行っています。"},
         {"icon": "🌸", "title": "地域イベント", "desc": "立田フェス・敬老会・清掃活動など、年間を通じてイベントを開催しています。"},
         {"icon": "🚨", "title": "防災・災害対策", "desc": "避難訓練の実施や備蓄品の管理など、災害に備えた活動を行っています。"},
         {"icon": "♻️", "title": "ごみ・環境美化", "desc": "ごみ収集ルールの周知と、地域の清掃活動を定期的に実施しています。"},
@@ -106,16 +106,6 @@ MONTHS = [str(i) + "月" for i in range(1, 13)]
 
 
 def get_files_by_month(folder_type):
-    """
-    Cloudinaryからファイルを取得し月別に整理する。
-
-    Cloudinaryの仕様:
-      - public_id には拡張子が含まれない（例: "jichikai/shiryo/04_report"）
-      - format フィールドに拡張子が格納される（例: "pdf", "jpg", "png"）
-      - resource_type="image" で PDF・画像を、"raw" でその他を管理
-
-    そのため fname は必ず "{base_name}.{format}" の形で組み立てる。
-    """
     result = {m: [] for m in MONTHS}
     prefix = f"jichikai/{folder_type}/"
 
@@ -129,44 +119,28 @@ def get_files_by_month(folder_type):
             )
             for r in res.get("resources", []):
                 public_id = r["public_id"]
-                # フォルダ部分を除いたファイル名部分（拡張子なし）
                 base_name = public_id.split("/")[-1]
                 fmt = r.get("format", "").lower()
-
-                # ★ポイント: Cloudinaryのpublic_idには拡張子が含まれない。
-                #   必ずformatフィールドから拡張子を付与する。
-                #   formatが空の場合のみ拡張子なしで登録（rawの一部ケース）。
                 fname = f"{base_name}.{fmt}" if fmt else base_name
 
-                # 月プレフィックス（例: "04_" → 4月）を解析
                 prefix_part = base_name.split("_")[0]
                 if prefix_part.isdigit() and 1 <= int(prefix_part) <= 12:
                     month_key = str(int(prefix_part)) + "月"
                     if fname not in result[month_key]:
                         result[month_key].append(fname)
-
         except Exception as e:
             print(f"Cloudinary list error ({folder_type}, {r_type}): {e}")
-
     return result
 
 
 def get_cloudinary_url(folder_type, fname):
-    """
-    ファイル名からCloudinaryの直接URLを生成する。
-    - PDF・画像拡張子 → image/upload/{public_id}.{ext}
-    - それ以外(zip等) → raw/upload/{public_id}.{ext}
-    """
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
-
     if "." in fname:
         base, ext = fname.rsplit(".", 1)
         ext = ext.lower()
     else:
         base, ext = fname, ""
-
     public_id = f"jichikai/{folder_type}/{base}"
-
     if ext == "pdf" or ext in IMAGE_EXTS or ext == "":
         url = f"https://res.cloudinary.com/{cloud_name}/image/upload/{public_id}"
         return f"{url}.{ext}" if ext else url
@@ -175,11 +149,6 @@ def get_cloudinary_url(folder_type, fname):
 
 
 def get_display_name(fname):
-    """
-    月番号プレフィックス（例: "04_"）を除いた表示用ファイル名を返す。
-    拡張子は保持する。
-    例: "04_議事録.pdf" → "議事録.pdf"
-    """
     if "." in fname:
         base, ext = fname.rsplit(".", 1)
         parts = base.split("_", 1)
@@ -320,6 +289,30 @@ def admin1_login():
         error = "名前またはパスワードが違います"
     return render_template("admin1_login.html", company=JICHIKAI, error=error)
 
+@app.route("/admin/rank1/change_password", methods=["GET", "POST"])
+def admin1_change_password():
+    if admin_rank() != 1:
+        return redirect(url_for("admin1_login"))
+    admin_name = session.get("admin_name", "")
+    msg = None
+    if request.method == "POST":
+        cfg = load_config()
+        cur_pw = request.form.get("current_password", "").strip()
+        new_pw = request.form.get("new_password", "").strip()
+        conf_pw = request.form.get("confirm_password", "").strip()
+        admin_info = cfg.get("admin1_users", {}).get(admin_name)
+        if not admin_info or not check_password_hash(admin_info["password_hash"], cur_pw):
+            msg = ("danger", "現在のパスワードが違います")
+        elif len(new_pw) < 4:
+            msg = ("danger", "新しいパスワードは4文字以上で入力してください")
+        elif new_pw != conf_pw:
+            msg = ("danger", "確認用パスワードが一致しません")
+        else:
+            cfg["admin1_users"][admin_name]["password_hash"] = generate_password_hash(new_pw)
+            save_config(cfg)
+            msg = ("success", "パスワードを変更しました")
+    return render_template("admin1_change_password.html", company=JICHIKAI, admin_name=admin_name, msg=msg)
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if admin_rank() >= 1: return redirect(url_for("admin_dashboard"))
@@ -367,7 +360,6 @@ def admin_dashboard():
                 )
                 public_id_base = "{:02d}_{}".format(month_num, base_name)
                 resource_type  = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
-                # config保存用キー: "{public_id_base}.{ext}" （拡張子付き）
                 save_name = f"{public_id_base}.{ext}" if ext else public_id_base
 
                 try:
@@ -455,6 +447,26 @@ def admin_dashboard():
                 name = request.form.get("user_name", "")
                 if name in cfg["kyogiin_users"]:
                     del cfg["kyogiin_users"][name]
+                    save_config(cfg)
+                    msg = ("success", "削除成功")
+            elif action == "add_admin1":
+                name    = request.form.get("new_name", "")
+                pw      = request.form.get("new_password", "")
+                conf_pw = request.form.get("confirm_password", "")
+                if name and pw == conf_pw:
+                    cfg["admin1_users"][name] = {"password_hash": generate_password_hash(pw), "active": True}
+                    save_config(cfg)
+                    msg = ("success", "ランク1管理者追加成功")
+            elif action == "toggle_admin1":
+                name = request.form.get("user_name", "")
+                if name in cfg["admin1_users"]:
+                    cfg["admin1_users"][name]["active"] = not cfg["admin1_users"][name].get("active", True)
+                    save_config(cfg)
+                    msg = ("success", "切り替え成功")
+            elif action == "delete_admin1":
+                name = request.form.get("user_name", "")
+                if name in cfg["admin1_users"]:
+                    del cfg["admin1_users"][name]
                     save_config(cfg)
                     msg = ("success", "削除成功")
 
