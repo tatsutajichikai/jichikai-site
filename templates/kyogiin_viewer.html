@@ -50,13 +50,6 @@
       max-width: 100%; max-height: 100%;
       object-fit: contain; display: block;
     }
-    .image-area img::after {
-      content: "画像を読み込めませんでした";
-      display: flex; align-items: center; justify-content: center;
-      width: 100%; height: 200px;
-      color: #fff; font-size: 1rem;
-      background: #444;
-    }
 
     .text-area {
       width: 100%; height: 100%; overflow: auto;
@@ -75,7 +68,6 @@
       color: #fff; text-align: center; padding: 40px;
     }
     .other-file-area .file-icon-big { font-size: 5rem; margin-bottom: 20px; }
-    .other-file-area p { font-size: 1.05rem; margin-bottom: 16px; opacity: .85; }
 
     .watermark-overlay {
       position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
@@ -116,36 +108,21 @@
   <div class="viewer-body">
 
     {% if file_ext == 'pdf' %}
-    {# ── PDF: pdf.js でレンダリング ── #}
+    {# ── PDF: pdf.js ── #}
     <div id="pdf-container" style="width:100%;height:100%;overflow-y:auto;background:#525659;padding:10px;box-sizing:border-box;">
       <div id="pdf-pages"></div>
     </div>
 
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
-    {# ── 画像: <img> タグで直接表示 ── #}
+    {# ── 画像 ── #}
     <div class="image-area">
-      <img src="{{ file_url }}" alt="{{ display_name }}"
-           onerror="this.style.display='none'; document.getElementById('img-error').style.display='flex';">
-      <div id="img-error" style="display:none; flex-direction:column; align-items:center;
-                                 justify-content:center; color:#fff; text-align:center; padding:40px;">
-        <div style="font-size:3rem; margin-bottom:16px;">🖼️</div>
-        <p style="font-size:1rem; opacity:.85;">画像を読み込めませんでした</p>
-        {% if allow_download %}
-        <a href="{{ file_url }}?dl=1" download="{{ display_name }}"
-           style="margin-top:12px; background:var(--green); color:#fff;
-                  padding:10px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">
-          ⬇️ ダウンロードして開く
-        </a>
-        {% endif %}
-      </div>
+      <img src="{{ file_url }}" alt="{{ display_name }}">
     </div>
 
     {% elif file_ext == 'mp4' %}
     {# ── 動画 ── #}
-    <video controls controlsList="nodownload"
-           {% if not allow_download %}oncontextmenu="return false;"{% endif %}>
+    <video controls controlsList="nodownload" {% if not allow_download %}oncontextmenu="return false;"{% endif %}>
       <source src="{{ file_url }}" type="video/mp4">
-      お使いのブラウザは動画再生に対応していません。
     </video>
 
     {% elif file_ext == 'txt' %}
@@ -155,20 +132,12 @@
     </div>
 
     {% else %}
-    {# ── その他ファイル ── #}
+    {# ── その他 ── #}
     <div class="other-file-area">
       <div class="file-icon-big">📄</div>
       <p>{{ display_name }}</p>
       {% if allow_download %}
-      <a href="{{ file_url }}?dl=1" download="{{ display_name }}"
-         style="background:var(--green);color:#fff;padding:12px 28px;
-                border-radius:6px;font-weight:bold;text-decoration:none;">
-        ⬇️ ダウンロードして開く
-      </a>
-      {% else %}
-      <p style="color:rgba(255,255,255,.6);font-size:.9rem;">
-        ※ このファイルはブラウザで表示できません。<br>ダウンロードも許可されていません。
-      </p>
+      <a href="{{ file_url }}?dl=1" download="{{ display_name }}" style="background:var(--green);color:#fff;padding:12px 28px;border-radius:6px;font-weight:bold;text-decoration:none;">⬇️ ダウンロードして開く</a>
       {% endif %}
     </div>
     {% endif %}
@@ -176,9 +145,9 @@
   </div>
 
   {% if file_ext != 'pdf' %}
-  {% if watermark or file_type == 'gijiroku' %}
-  <div class="watermark-overlay" id="watermarkOverlay"></div>
-  {% endif %}
+    {% if watermark or file_type == 'gijiroku' %}
+    <div class="watermark-overlay" id="watermarkOverlay"></div>
+    {% endif %}
   {% endif %}
 
   {% if file_ext == 'pdf' %}
@@ -188,65 +157,46 @@
   <script>
     {% if not allow_print %}
     document.addEventListener("keydown", function(e) {
-      if (
-        (e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) ||
-        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i")) ||
-        e.key === "F12"
-      ) { e.preventDefault(); return false; }
+      if ((e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) || (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i")) || e.key === "F12") { e.preventDefault(); return false; }
     });
     {% endif %}
 
     {% if file_ext == 'txt' %}
-    fetch("{{ file_url }}")
-      .then(r => r.text())
-      .then(t => { document.getElementById("textContent").textContent = t; })
-      .catch(() => { document.getElementById("textContent").textContent = "読み込みに失敗しました。"; });
+    fetch("{{ file_url }}").then(r => r.text()).then(t => { document.getElementById("textContent").textContent = t; });
     {% endif %}
 
-    /* ── ウォーターマーク生成 ── */
     const userName  = {{ user_name | tojson }};
     const now       = new Date();
     const pad       = n => String(n).padStart(2, "0");
     const waterText = `${userName}　${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
     {% if file_ext != 'pdf' %}
-    {% if watermark or file_type == 'gijiroku' %}
-    (function() {
-      const overlay = document.getElementById("watermarkOverlay");
-      if (!overlay) return;
-      const cols = Math.ceil(window.innerWidth  / 320) + 2;
-      const rows = Math.ceil(window.innerHeight / 160) + 2;
-      for (let r = -1; r < rows; r++) {
-        for (let c = -1; c < cols; c++) {
-          const el = document.createElement("div");
-          el.className = "watermark-text";
-          el.textContent = waterText;
-          el.style.left = (c * 320 - 60) + "px";
-          el.style.top  = (r * 160 + 40) + "px";
-          overlay.appendChild(el);
+      {% if watermark or file_type == 'gijiroku' %}
+      (function() {
+        const overlay = document.getElementById("watermarkOverlay");
+        if (!overlay) return;
+        const cols = Math.ceil(window.innerWidth / 320) + 2;
+        const rows = Math.ceil(window.innerHeight / 160) + 2;
+        for (let r = -1; r < rows; r++) {
+          for (let c = -1; c < cols; c++) {
+            const el = document.createElement("div");
+            el.className = "watermark-text";
+            el.textContent = waterText;
+            el.style.left = (c * 320 - 60) + "px";
+            el.style.top  = (r * 160 + 40) + "px";
+            overlay.appendChild(el);
+          }
         }
-      }
-    })();
-    {% endif %}
+      })();
+      {% endif %}
     {% endif %}
 
-    /* ── PDF レンダリング ── */
+    /* ── PDF 描画エンジン ── */
     {% if file_ext == 'pdf' %}
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    // CMap(日本語フォント対応)の設定を追加
-    const CMAP_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/";
-    const CMAP_PACKED = true;
-
-    {% if watermark or file_type == 'gijiroku' %}
-    const showWatermark = true;
-    {% else %}
-    const showWatermark = false;
-    {% endif %}
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     function drawWatermark(canvas) {
-      if (!showWatermark) return;
+      {% if watermark or file_type == 'gijiroku' %}
       const ctx = canvas.getContext('2d');
       ctx.save();
       const fontSize = Math.max(14, canvas.width * 0.035);
@@ -264,37 +214,45 @@
         }
       }
       ctx.restore();
+      {% endif %}
     }
 
-    pdfjsLib.getDocument({
+    const loadingTask = pdfjsLib.getDocument({
       url: "{{ file_url }}",
-      withCredentials: false,
-      cMapUrl: CMAP_URL,       // 日本語対応用
-      cMapPacked: CMAP_PACKED  // 日本語対応用
-    }).promise.then(function(doc) {
+      cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+      cMapPacked: true,
+      disableFontFace: false,
+      stopAtErrors: false
+    });
+
+    loadingTask.promise.then(function(doc) {
       const container = document.getElementById('pdf-pages');
       for (let i = 1; i <= doc.numPages; i++) {
         doc.getPage(i).then(function(page) {
           const wrapper = document.createElement('div');
-          wrapper.style.cssText = 'position:relative;margin:0 auto 10px;';
+          wrapper.style.cssText = 'position:relative;margin:0 auto 10px;box-shadow:0 2px 5px rgba(0,0,0,0.3);background:#fff;';
           const canvas = document.createElement('canvas');
-          canvas.style.cssText = 'display:block;max-width:100%;';
-          const scale = (container.clientWidth || window.innerWidth) /
-                        page.getViewport({scale: 1}).width;
-          const viewport = page.getViewport({scale: scale});
+          canvas.style.cssText = 'display:block;width:100%;height:auto;';
+          
+          const viewport = page.getViewport({scale: 2.0}); // 高精細に描画
           canvas.width  = viewport.width;
           canvas.height = viewport.height;
+          
           wrapper.appendChild(canvas);
           container.appendChild(wrapper);
-          page.render({canvasContext: canvas.getContext('2d'), viewport: viewport})
-              .promise.then(() => drawWatermark(canvas));
+          
+          const renderContext = {
+            canvasContext: canvas.getContext('2d'),
+            viewport: viewport
+          };
+          page.render(renderContext).promise.then(() => drawWatermark(canvas));
         });
       }
-    }).catch(function(err) {
-      console.error("PDF表示エラー:", err);
+    }).catch(err => {
+      console.error("PDF読み込み失敗:", err);
+      document.getElementById('pdf-pages').innerHTML = '<p style="color:#fff;text-align:center;">PDFの表示中にエラーが発生しました。</p>';
     });
     {% endif %}
-
   </script>
 </body>
 </html>
