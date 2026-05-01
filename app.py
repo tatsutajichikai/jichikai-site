@@ -85,7 +85,7 @@ JICHIKAI = {
     "meeting_day": "毎月第3土曜日 午後19時30分〜",
     "meeting_place": "集落センター",
     "services": [
-        {"icon": "🏘️", "title": "地域の安全・防防", "desc": "年末夜間パトロールや防犯灯の管理を行っています。"},
+        {"icon": "🏘️", "title": "地域の安全・防犯", "desc": "年末夜間パトロールや防犯灯の管理を行っています。"},
         {"icon": "🌸", "title": "地域イベント", "desc": "立田フェス・敬老会・清掃活動など、年間を通じてイベントを開催しています。"},
         {"icon": "🚨", "title": "防災・災害対策", "desc": "避難訓練の実施や備蓄品の管理など、災害に備えた活動を行っています。"},
         {"icon": "♻️", "title": "ごみ・環境美化", "desc": "ごみ収集ルールの周知と、地域の清掃活動を定期的に実施しています。"},
@@ -485,6 +485,29 @@ def admin_dashboard():
         admin_name=session.get("admin_name", ""),
         msg=msg,
         get_display_name=get_display_name
+    )
+
+@app.route("/admin/view/<file_type>/<path:filename>")
+def admin_view_file(file_type, filename):
+    if admin_rank() < 1: return redirect(url_for("admin_login"))
+    if file_type not in ("shiryo", "gijiroku"): abort(404)
+    safe = os.path.basename(filename)
+    file_url = get_cloudinary_url(file_type, safe)
+    ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
+    return render_template(
+        "kyogiin_viewer.html",
+        company=JICHIKAI,
+        filename=safe,
+        display_name=get_display_name(safe),
+        user_name=session.get("admin_name", "管理者"),
+        file_url=file_url,
+        file_url_abs=file_url,
+        file_ext=ext,
+        watermark=False,
+        allow_download=True,
+        allow_print=True,
+        is_pdf=(ext == "pdf"),
+        file_type=file_type
     )
 
 @app.route("/admin/download_config")
