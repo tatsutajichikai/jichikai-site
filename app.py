@@ -112,7 +112,6 @@ def get_files_by_month(folder_type):
                 base_name = public_id.split("/")[-1]
                 fmt = r.get("format", "").lower()
                 
-                # 強制的に拡張子を復元
                 if "." in base_name:
                     fname = base_name
                 elif fmt:
@@ -209,6 +208,7 @@ def kyogiin_raw_file(file_type, filename):
     if not session.get("kyogiin_logged_in"): abort(403)
     return redirect(get_cloudinary_url(file_type, os.path.basename(filename)))
 
+# ログで指摘された全ての名前を復旧
 @app.route("/admin/rank1", methods=["GET", "POST"])
 def admin1_login():
     if admin_rank() >= 1: return redirect(url_for("admin_dashboard"))
@@ -278,13 +278,24 @@ def admin_dashboard():
         cfg = load_config()
     return render_template("admin_dashboard.html", company=JICHIKAI, months=MONTHS, shiryo_by_month=get_files_by_month("shiryo"), gijiroku_by_month=get_files_by_month("gijiroku"), kyogiin_users=cfg.get("kyogiin_users", {}), admin1_users=cfg.get("admin1_users", {}), file_meta=cfg.get("file_meta", {}), admin_rank=admin_rank(), admin_name=session.get("admin_name", ""), msg=msg, get_display_name=get_display_name)
 
-# エラーを解決するための重要な追加
+# HTML側が求めている「行き先」をすべて作成
 @app.route("/admin/download_config")
 def admin_download_config():
     if admin_rank() < 2: return redirect(url_for("admin_login"))
     cfg = load_config()
     buf = io.BytesIO(json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8"))
     return send_file(buf, as_attachment=True, download_name="config_backup.json", mimetype="application/json")
+
+@app.route("/admin/upload_config", methods=["POST"])
+def admin_upload_config():
+    if admin_rank() < 2: return redirect(url_for("admin_login"))
+    file = request.files.get("config_file")
+    if file:
+        try:
+            new_cfg = json.load(file)
+            save_config(new_cfg)
+        except: pass
+    return redirect(url_for("admin_dashboard"))
 
 @app.route("/ping")
 def ping(): return "pong", 200
