@@ -265,13 +265,23 @@
       ctx.restore();
     }
 
+    // ★ cMapUrl: 日本語(CJK)フォントのマッピングデータを読み込む設定
+    //    これがないと日本語テキストが描画されず表の中身が空欄になる
+    const PDFJS_VERSION = '3.11.174';
+    const CMAP_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/cmaps/`;
+
     pdfjsLib.getDocument({
       url: "{{ file_url }}",
-      withCredentials: false
+      withCredentials: false,
+      cMapUrl: CMAP_URL,      // ← 日本語フォントマップの読み込み先
+      cMapPacked: true,       // ← 圧縮済みcmapを使用（転送量削減）
+      standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/standard_fonts/`
     }).promise.then(function(doc) {
       const container = document.getElementById('pdf-pages');
-      for (let i = 1; i <= doc.numPages; i++) {
-        doc.getPage(i).then(function(page) {
+      // ページを順番に描画するため直列処理（並列だと順序が崩れる）
+      const renderPage = (pageNum) => {
+        if (pageNum > doc.numPages) return;
+        doc.getPage(pageNum).then(function(page) {
           const wrapper = document.createElement('div');
           wrapper.style.cssText = 'position:relative;margin:0 auto 10px;';
           const canvas = document.createElement('canvas');
@@ -284,9 +294,18 @@
           wrapper.appendChild(canvas);
           container.appendChild(wrapper);
           page.render({canvasContext: canvas.getContext('2d'), viewport: viewport})
-              .promise.then(() => drawWatermark(canvas));
+              .promise.then(() => {
+                drawWatermark(canvas);
+                renderPage(pageNum + 1); // 次のページへ
+              });
         });
-      }
+      };
+      renderPage(1);
+    }).catch(function(err) {
+      console.error('PDF読み込みエラー:', err);
+      const container = document.getElementById('pdf-pages');
+      container.innerHTML =
+        '<p style="color:#fff;text-align:center;padding:40px;">PDFの読み込みに失敗しました。<br>' + err.message + '</p>';
     });
     {% endif %}
 
