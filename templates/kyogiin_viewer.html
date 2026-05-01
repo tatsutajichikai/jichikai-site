@@ -2,20 +2,124 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>検証用ビューア</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ display_name }} - {{ company.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
-    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-    .header { height: 50px; background: #2e7d32; color: white; display: flex; align-items: center; padding: 0 20px; }
-    iframe { width: 100%; height: calc(100% - 50px); border: none; }
+    {% if not allow_print %}
+    @media print { html, body { display: none !important; } }
+    {% endif %}
+
+    body { margin: 0; background: #333; user-select: none; overflow: hidden; }
+
+    .viewer-header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+      background: var(--green);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px; height: 52px; gap: 10px;
+    }
+    .viewer-header .title {
+      color: #fff; font-weight: bold; font-size: .95rem;
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .viewer-header-btns { display: flex; gap: 8px; flex-shrink: 0; }
+    .viewer-header a, .viewer-header button {
+      color: rgba(255,255,255,.85); font-size: .85rem;
+      padding: 5px 14px; border: 1px solid rgba(255,255,255,.4);
+      border-radius: 4px; text-decoration: none;
+      background: transparent; cursor: pointer;
+    }
+
+    .viewer-body {
+      margin-top: 52px;
+      width: 100%; height: calc(100vh - 52px);
+      position: relative;
+      background: #525659;
+    }
+
+    /* PDF表示エリア */
+    .pdf-frame {
+      width: 100%; height: 100%; border: none;
+    }
+
+    /* ウォーターマークの重なり設定 */
+    .watermark-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none; /* 下のPDF操作を邪魔しない */
+      z-index: 200; overflow: hidden;
+    }
+    .watermark-text {
+      position: absolute; white-space: nowrap;
+      font-size: 24px; font-weight: bold;
+      color: rgba(180, 0, 0, 0.15);
+      transform: rotate(-35deg);
+      user-select: none;
+    }
   </style>
 </head>
-<body>
-  <div class="header">
-    PDF検証表示（{{ display_name }}）
-    <a href="{{ url_for('kyogiin_files', month='1月') }}" style="color:white; margin-left: auto;">← 戻る</a>
+<body
+  {% if not allow_print %}
+  oncontextmenu="return false;"
+  ondragstart="return false;"
+  onselectstart="return false;"
+  {% endif %}>
+
+  <div class="viewer-header">
+    <span class="title">📄 {{ display_name }}</span>
+    <div class="viewer-header-btns">
+      {% if allow_download %}
+      <a href="{{ file_url }}?dl=1" download="{{ display_name }}">⬇️ ダウンロード</a>
+      {% endif %}
+      <a href="{{ url_for('kyogiin_files', month='1月') }}">← 戻る</a>
+    </div>
   </div>
-  
-  <!-- ブラウザ標準の機能でPDFを表示（embedタグ） -->
-  <embed src="{{ file_url }}" type="application/pdf" width="100%" height="100%">
+
+  <div class="viewer-body">
+    <!-- PDF本体：ブラウザ標準ビューアを使用（数字が確実に出る方式） -->
+    <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
+
+    <!-- ウォーターマーク層 -->
+    {% if watermark or file_type == 'gijiroku' %}
+    <div class="watermark-overlay" id="watermarkOverlay"></div>
+    {% endif %}
+  </div>
+
+  <script>
+    /* 右クリック・ショートカット制限 */
+    {% if not allow_print %}
+    document.addEventListener("keydown", function(e) {
+      if ((e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) || e.key === "F12") {
+        e.preventDefault();
+        return false;
+      }
+    });
+    {% endif %}
+
+    /* ウォーターマーク生成 */
+    {% if watermark or file_type == 'gijiroku' %}
+    (function() {
+      const overlay = document.getElementById("watermarkOverlay");
+      if (!overlay) return;
+      
+      const userName = {{ user_name | tojson }};
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+      const waterText = `${userName} ${dateStr}`;
+
+      const cols = 4;
+      const rows = 6;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const el = document.createElement("div");
+          el.className = "watermark-text";
+          el.textContent = waterText;
+          el.style.left = (c * 30) + "%";
+          el.style.top  = (r * 18) + "%";
+          overlay.appendChild(el);
+        }
+      }
+    })();
+    {% endif %}
+  </script>
 </body>
 </html>
