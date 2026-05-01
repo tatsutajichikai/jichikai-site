@@ -32,9 +32,12 @@
     <div class="alert alert-{{ msg[0] }}">{{ msg[1] }}</div>
   {% endif %}
 
+  <!-- ══════ ランク1・2共通 ══════ -->
+
   <!-- 資料アップロード -->
   <div class="admin-card">
     <h3>📁 資料アップロード</h3>
+    <p class="card-desc">ファイル形式の制限なし。ダウンロード・印刷・透かしを個別に設定できます。</p>
     <form method="POST" enctype="multipart/form-data" action="{{ url_for('admin_dashboard') }}">
       <input type="hidden" name="action" value="upload_shiryo">
       <div class="form-row">
@@ -47,12 +50,19 @@
         <div class="form-group form-grow">
           <label>ファイル（PDF・画像のみ）</label>
           <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png,.gif">
+          <small style="color:#888;">※ PDF・画像ファイル（JPG・PNG・GIF）のみアップロード可能です</small>
         </div>
       </div>
       <div class="permission-row">
-        <label class="checkbox-label"><input type="checkbox" name="watermark" value="1" checked>透かし表示</label>
-        <label class="checkbox-label"><input type="checkbox" name="download" value="1">DL許可</label>
-        <label class="checkbox-label"><input type="checkbox" name="print" value="1">印刷許可</label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="watermark" value="1" checked>透かし表示する
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="download" value="1">ダウンロードを許可する
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="print" value="1">印刷を許可する
+        </label>
       </div>
       <button type="submit" class="btn">アップロード</button>
     </form>
@@ -61,6 +71,7 @@
   <!-- 議事録アップロード -->
   <div class="admin-card">
     <h3>📝 議事録アップロード</h3>
+    <p class="card-desc">PDFファイルのみ。ダウンロード・印刷は不可、透かしあり（固定）。</p>
     <form method="POST" enctype="multipart/form-data" action="{{ url_for('admin_dashboard') }}">
       <input type="hidden" name="action" value="upload_gijiroku">
       <div class="form-row">
@@ -75,6 +86,9 @@
           <input type="file" name="file" accept=".pdf" required>
         </div>
       </div>
+      <div class="permission-row fixed-permissions">
+        <span>🔒 ダウンロード不可・印刷不可・透かしあり（固定）</span>
+      </div>
       <button type="submit" class="btn">アップロード</button>
     </form>
   </div>
@@ -82,89 +96,221 @@
   <!-- ファイル管理 -->
   <div class="admin-card">
     <h3>📂 アップロード済みファイル管理</h3>
+
     <h4 class="file-section-title">📁 資料</h4>
-    {% for m in months %}{% if shiryo_by_month[m] %}
+    {% set has_s = namespace(v=false) %}
+    {% for m in months %}{% if shiryo_by_month[m] %}{% set has_s.v = true %}{% endif %}{% endfor %}
+    {% if has_s.v %}
+      {% for m in months %}{% if shiryo_by_month[m] %}
       <div class="month-section">
         <h5>{{ m }}</h5>
         {% for fname in shiryo_by_month[m] %}
+        {% set meta = file_meta.get(fname, {}) %}
         <div class="file-item">
+          <span class="file-icon">📄</span>
           <span class="file-name">{{ get_display_name(fname) }}</span>
-          
-          <div class="file-meta-badges">
-            {% set meta = file_meta.get(fname, {}) %}
-            <span class="badge {{ 'badge-green' if meta.get('watermark',True) else 'badge-gray' }}">
-              {{ '透かし' if meta.get('watermark',True) else '透かしなし' }}
-            </span>
-            <span class="badge {{ 'badge-green' if meta.get('download') else 'badge-gray' }}">
-              {{ 'DL可' if meta.get('download') else 'DL不可' }}
-            </span>
-            <span class="badge {{ 'badge-green' if meta.get('print') else 'badge-gray' }}">
-              {{ '印刷可' if meta.get('print') else '印刷不可' }}
-            </span>
-          </div>
-
-          <div class="file-actions" style="display: flex; gap: 8px;">
-            <a href="{{ url_for('admin_view_file', file_type='shiryo', filename=fname) }}" 
-               target="_blank" class="btn btn-blue btn-sm">表示</a>
-            
-            <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline" onsubmit="return confirm('削除しますか？')">
-              <input type="hidden" name="action" value="delete_shiryo">
-              <input type="hidden" name="filename" value="{{ fname }}">
-              <button type="submit" class="btn btn-danger btn-sm">削除</button>
-            </form>
-          </div>
+          <span class="meta-badges">
+            <span class="mbadge {{ 'mbadge-on' if meta.get('watermark', true) else 'mbadge-off' }}">{{ '透かし' if meta.get('watermark', true) else '透かしなし' }}</span>
+            <span class="mbadge {{ 'mbadge-on' if meta.get('download', false) else 'mbadge-off' }}">{{ 'DL可' if meta.get('download', false) else 'DL不可' }}</span>
+            <span class="mbadge {{ 'mbadge-on' if meta.get('print', false) else 'mbadge-off' }}">{{ '印刷可' if meta.get('print', false) else '印刷不可' }}</span>
+          </span>
+          <a href="{{ url_for('kyogiin_view_file', file_type='shiryo', filename=fname) }}"
+             target="_blank" class="btn btn-view btn-sm">表示</a>
+          <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline"
+                onsubmit="return confirm('削除しますか？')">
+            <input type="hidden" name="action" value="delete_shiryo">
+            <input type="hidden" name="filename" value="{{ fname }}">
+            <button type="submit" class="btn btn-danger btn-sm">削除</button>
+          </form>
         </div>
         {% endfor %}
       </div>
-    {% endif %}{% endfor %}
+      {% endif %}{% endfor %}
+    {% else %}
+      <p class="no-files-msg">📭 資料はまだありません</p>
+    {% endif %}
 
     <h4 class="file-section-title" style="margin-top:24px;">📝 議事録</h4>
-    {% for m in months %}{% if gijiroku_by_month[m] %}
+    {% set has_g = namespace(v=false) %}
+    {% for m in months %}{% if gijiroku_by_month[m] %}{% set has_g.v = true %}{% endif %}{% endfor %}
+    {% if has_g.v %}
+      {% for m in months %}{% if gijiroku_by_month[m] %}
       <div class="month-section">
         <h5>{{ m }}</h5>
         {% for fname in gijiroku_by_month[m] %}
         <div class="file-item">
+          <span class="file-icon">📄</span>
           <span class="file-name">{{ get_display_name(fname) }}</span>
-          
-          <div class="file-actions" style="display: flex; gap: 8px;">
-            <a href="{{ url_for('admin_view_file', file_type='gijiroku', filename=fname) }}" 
-               target="_blank" class="btn btn-blue btn-sm">表示</a>
-
-            <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline" onsubmit="return confirm('削除しますか？')">
-              <input type="hidden" name="action" value="delete_gijiroku">
-              <input type="hidden" name="filename" value="{{ fname }}">
-              <button type="submit" class="btn btn-danger btn-sm">削除</button>
-            </form>
-          </div>
+          <span class="meta-badges">
+            <span class="mbadge mbadge-on">透かし</span>
+            <span class="mbadge mbadge-off">DL不可</span>
+            <span class="mbadge mbadge-off">印刷不可</span>
+          </span>
+          <a href="{{ url_for('kyogiin_view_file', file_type='gijiroku', filename=fname) }}"
+             target="_blank" class="btn btn-view btn-sm">表示</a>
+          <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline"
+                onsubmit="return confirm('削除しますか？')">
+            <input type="hidden" name="action" value="delete_gijiroku">
+            <input type="hidden" name="filename" value="{{ fname }}">
+            <button type="submit" class="btn btn-danger btn-sm">削除</button>
+          </form>
         </div>
         {% endfor %}
       </div>
-    {% endif %}{% endfor %}
+      {% endif %}{% endfor %}
+    {% else %}
+      <p class="no-files-msg">📭 議事録はまだありません</p>
+    {% endif %}
   </div>
 
+  <!-- ══════ ランク2専用 ══════ -->
   {% if admin_rank == 2 %}
-  <!-- ランク2専用：ユーザー管理 -->
+
+  <!-- 協議員ユーザー管理 -->
   <div class="admin-card rank2-card">
-    <h3>👥 協議員ユーザー管理</h3>
+    <h3>👥 協議員ユーザー管理 <span class="rank-label">ランク2専用</span></h3>
+    <div class="add-user-form">
+      <h4>新規協議員追加</h4>
+      <form method="POST" action="{{ url_for('admin_dashboard') }}">
+        <input type="hidden" name="action" value="add_kyogiin">
+        <div class="form-row">
+          <div class="form-group">
+            <label>お名前</label>
+            <input type="text" name="new_name" placeholder="例：山田太郎" required>
+          </div>
+          <div class="form-group">
+            <label>パスワード</label>
+            <input type="password" name="new_password" placeholder="パスワード" required>
+          </div>
+          <div class="form-group">
+            <label>確認用パスワード</label>
+            <input type="password" name="confirm_password" placeholder="もう一度入力" required>
+          </div>
+        </div>
+        <button type="submit" class="btn">追加する</button>
+      </form>
+    </div>
+    <h4 style="margin-top:20px;">登録協議員一覧（{{ kyogiin_users|length }}人）</h4>
+    {% if kyogiin_users %}
+    <div class="user-table-wrap">
+      <table class="user-table">
+        <thead><tr><th>名前</th><th>状態</th><th>パスワード変更</th><th>操作</th></tr></thead>
+        <tbody>
+          {% for name, info in kyogiin_users.items() %}
+          <tr class="{{ 'inactive' if not info.get('active', true) }}">
+            <td>{{ name }}</td>
+            <td><span class="badge {{ 'badge-active' if info.get('active', true) else 'badge-inactive' }}">{{ '有効' if info.get('active', true) else '無効' }}</span></td>
+            <td>
+              <form method="POST" action="{{ url_for('admin_dashboard') }}" class="inline-form">
+                <input type="hidden" name="action" value="change_kyogiin_pw">
+                <input type="hidden" name="user_name" value="{{ name }}">
+                <input type="password" name="new_password" placeholder="新PW" required style="width:110px">
+                <input type="password" name="confirm_password" placeholder="確認" required style="width:90px">
+                <button type="submit" class="btn btn-sm">変更</button>
+              </form>
+            </td>
+            <td>
+              <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline">
+                <input type="hidden" name="action" value="toggle_kyogiin">
+                <input type="hidden" name="user_name" value="{{ name }}">
+                <button class="btn btn-sm {{ 'btn-warning' if info.get('active', true) else 'btn-success' }}">{{ '無効化' if info.get('active', true) else '有効化' }}</button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline"
+                    onsubmit="return confirm('「{{ name }}」を削除しますか？')">
+                <input type="hidden" name="action" value="delete_kyogiin">
+                <input type="hidden" name="user_name" value="{{ name }}">
+                <button class="btn btn-danger btn-sm">削除</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="no-files-msg">👤 協議員がまだ登録されていません</p>
+    {% endif %}
+  </div>
+
+  <!-- ランク1管理者管理 -->
+  <div class="admin-card rank2-card">
+    <h3>🔑 ランク1管理者管理 <span class="rank-label">ランク2専用</span></h3>
+    <div class="add-user-form">
+      <h4>新規ランク1管理者追加</h4>
+      <form method="POST" action="{{ url_for('admin_dashboard') }}">
+        <input type="hidden" name="action" value="add_admin1">
+        <div class="form-row">
+          <div class="form-group">
+            <label>お名前</label>
+            <input type="text" name="new_name" placeholder="例：鈴木一郎" required>
+          </div>
+          <div class="form-group">
+            <label>パスワード</label>
+            <input type="password" name="new_password" placeholder="パスワード" required>
+          </div>
+          <div class="form-group">
+            <label>確認用パスワード</label>
+            <input type="password" name="confirm_password" placeholder="もう一度入力" required>
+          </div>
+        </div>
+        <button type="submit" class="btn">追加する</button>
+      </form>
+    </div>
+    <h4 style="margin-top:20px;">ランク1管理者一覧（{{ admin1_users|length }}人）</h4>
+    {% if admin1_users %}
+    <div class="user-table-wrap">
+      <table class="user-table">
+        <thead><tr><th>名前</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody>
+          {% for name, info in admin1_users.items() %}
+          <tr class="{{ 'inactive' if not info.get('active', true) }}">
+            <td>{{ name }}</td>
+            <td><span class="badge {{ 'badge-active' if info.get('active', true) else 'badge-inactive' }}">{{ '有効' if info.get('active', true) else '無効' }}</span></td>
+            <td>
+              <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline">
+                <input type="hidden" name="action" value="toggle_admin1">
+                <input type="hidden" name="user_name" value="{{ name }}">
+                <button class="btn btn-sm {{ 'btn-warning' if info.get('active', true) else 'btn-success' }}">{{ '無効化' if info.get('active', true) else '有効化' }}</button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_dashboard') }}" style="display:inline"
+                    onsubmit="return confirm('「{{ name }}」を削除しますか？')">
+                <input type="hidden" name="action" value="delete_admin1">
+                <input type="hidden" name="user_name" value="{{ name }}">
+                <button class="btn btn-danger btn-sm">削除</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="no-files-msg">👤 ランク1管理者がまだ登録されていません</p>
+    {% endif %}
+  </div>
+
+  <!-- ランク2パスワード変更 -->
+  <div class="admin-card rank2-card">
+    <h3>🛡️ ランク2パスワード変更 <span class="rank-label">ランク2専用</span></h3>
     <form method="POST" action="{{ url_for('admin_dashboard') }}">
-      <input type="hidden" name="action" value="add_kyogiin">
-      <input type="text" name="new_name" placeholder="お名前" required>
-      <input type="password" name="new_password" placeholder="パスワード" required>
-      <input type="password" name="confirm_password" placeholder="確認用" required>
-      <button type="submit" class="btn">追加</button>
+      <input type="hidden" name="action" value="change_admin2_pw">
+      <div class="form-group">
+        <label>現在のパスワード</label>
+        <input type="password" name="current_password" placeholder="現在のパスワード" required>
+      </div>
+      <div class="form-group">
+        <label>新しいパスワード</label>
+        <input type="password" name="new_password" placeholder="新しいパスワード" required>
+      </div>
+      <div class="form-group">
+        <label>確認用パスワード</label>
+        <input type="password" name="confirm_password" placeholder="もう一度入力" required>
+      </div>
+      <button type="submit" class="btn">変更する</button>
     </form>
   </div>
 
-  <div class="admin-card rank2-card">
-    <h3>🔑 ランク1管理者管理</h3>
-    <form method="POST" action="{{ url_for('admin_dashboard') }}">
-      <input type="hidden" name="action" value="add_admin1">
-      <input type="text" name="new_name" placeholder="お名前" required>
-      <input type="password" name="new_password" placeholder="パスワード" required>
-      <input type="password" name="confirm_password" placeholder="確認用" required>
-      <button type="submit" class="btn">追加</button>
-    </form>
-  </div>
+  {% else %}
   {% endif %}
 
 </section>
