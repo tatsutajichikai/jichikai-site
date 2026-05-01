@@ -112,11 +112,13 @@ def get_files_by_month(folder_type):
                 base_name = public_id.split("/")[-1]
                 fmt = r.get("format", "").lower()
                 
+                # 柔軟な拡張子復元（リストに必ず表示されるように改善）
                 if "." in base_name:
                     fname = base_name
                 elif fmt:
                     fname = f"{base_name}.{fmt}"
                 else:
+                    # 拡張子が不明な場合もリストには出す
                     fname = base_name
 
                 m_part = base_name.split("_")[0]
@@ -130,11 +132,16 @@ def get_files_by_month(folder_type):
 
 def get_cloudinary_url(folder_type, fname):
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
-    base, ext = fname.rsplit(".", 1) if "." in fname else (fname, "")
-    ext = ext.lower()
+    if "." in fname:
+        base, ext = fname.rsplit(".", 1)
+        ext = ext.lower()
+    else:
+        base, ext = fname, ""
     public_id = f"jichikai/{folder_type}/{base}"
     r_type = "image" if (ext == "pdf" or ext in IMAGE_EXTS) else "raw"
-    return f"https://res.cloudinary.com/{cloud_name}/{r_type}/upload/{public_id}.{ext}"
+    # URL末尾に拡張子を強制
+    suffix = f".{ext}" if ext else ""
+    return f"https://res.cloudinary.com/{cloud_name}/{r_type}/upload/{public_id}{suffix}"
 
 def get_display_name(fname):
     parts = fname.split("_", 1)
@@ -168,7 +175,7 @@ def kyogiin():
             if check_password_hash(users[name]["password_hash"], password):
                 session["kyogiin_logged_in"], session["kyogiin_name"] = True, name
                 return redirect(url_for("kyogiin_files", month="1月"))
-        error = "認証失敗"
+        error = "名前またはパスワードが違います"
     return render_template("kyogiin_login.html", company=JICHIKAI, error=error)
 
 @app.route("/kyogiin/logout")
@@ -208,7 +215,6 @@ def kyogiin_raw_file(file_type, filename):
     if not session.get("kyogiin_logged_in"): abort(403)
     return redirect(get_cloudinary_url(file_type, os.path.basename(filename)))
 
-# ログで指摘された全ての名前を復旧
 @app.route("/admin/rank1", methods=["GET", "POST"])
 def admin1_login():
     if admin_rank() >= 1: return redirect(url_for("admin_dashboard"))
@@ -248,37 +254,47 @@ def admin_dashboard():
     cfg, msg = load_config(), None
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "upload_shiryo":
-            month, file = request.form.get("month", "1月"), request.files.get("file")
-            wm, dl, pr = request.form.get("watermark") == "1", request.form.get("download") == "1", request.form.get("print") == "1"
+        # 共通のアップロード処理
+        if action in ["upload_shiryo", "upload_gijiroku"]:
+            month = request.form.get("month", "1月")
+            file = request.files.get("file")
+            folder = "shiryo" if action == "upload_shiryo" else "gijiroku"
+            
             if file and file.filename:
                 ext = file.filename.rsplit(".", 1)[-1].lower()
-                if ext in BLOCKED_SHIRYO: msg = ("danger", "PDFにしてください")
+                if folder == "shiryo" and ext in BLOCKED_SHIRYO:
+                    msg = ("danger", "PDFに変換してください")
+                elif folder == "gijiroku" and not allowed_gijiroku(file.filename):
+                    msg = ("danger", "議事録はPDFのみです")
                 else:
                     m_idx = MONTHS.index(month) + 1
                     base = strip_month_prefix(file.filename.rsplit(".", 1)[0])
                     p_id = "{:02d}_{}".format(m_idx, base)
                     r_type = "image" if (ext in IMAGE_EXTS or ext == "pdf") else "raw"
                     try:
-                        cloudinary.uploader.upload(file, public_id=p_id, folder="jichikai/shiryo", resource_type=r_type, overwrite=True)
-                        cfg.setdefault("file_meta", {})[f"{p_id}.{ext}"] = {"watermark": wm, "download": dl, "print": pr}
-                        save_config(cfg)
-                        msg = ("success", "保存完了")
+                        cloudinary.uploader.upload(file, public_id=p_id, folder=f"jichikai/{folder}", resource_type=r_type, overwrite=True)
+                        if folder == "shiryo":
+                            wm = request.form.get("watermark") == "1"
+                            dl = request.form.get("download") == "1"
+                            pr = request.form.get("print") == "1"
+                            cfg.setdefault("file_meta", {})[f"{p_id}.{ext}"] = {"watermark": wm, "download": dl, "print": pr}
+                            save_config(cfg)
+                        msg = ("success", f"{'資料' if folder=='shiryo' else '議事録'}保存完了")
                     except Exception as e: msg = ("danger", f"失敗: {e}")
+        
         elif action == "delete_shiryo":
             fname = request.form.get("filename", "")
             base, ext = fname.rsplit(".", 1) if "." in fname else (fname, "")
-            r_type = "image" if (ext.lower() in IMAGE_EXTS or ext.lower() == "pdf") else "raw"
             try:
-                cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type=r_type)
+                cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type="image")
+                cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type="raw")
                 cfg.get("file_meta", {}).pop(fname, None)
                 save_config(cfg)
                 msg = ("success", "削除完了")
-            except Exception as e: msg = ("danger", f"失敗: {e}")
+            except: msg = ("danger", "削除失敗")
         cfg = load_config()
     return render_template("admin_dashboard.html", company=JICHIKAI, months=MONTHS, shiryo_by_month=get_files_by_month("shiryo"), gijiroku_by_month=get_files_by_month("gijiroku"), kyogiin_users=cfg.get("kyogiin_users", {}), admin1_users=cfg.get("admin1_users", {}), file_meta=cfg.get("file_meta", {}), admin_rank=admin_rank(), admin_name=session.get("admin_name", ""), msg=msg, get_display_name=get_display_name)
 
-# HTML側が求めている「行き先」をすべて作成
 @app.route("/admin/download_config")
 def admin_download_config():
     if admin_rank() < 2: return redirect(url_for("admin_login"))
@@ -292,8 +308,7 @@ def admin_upload_config():
     file = request.files.get("config_file")
     if file:
         try:
-            new_cfg = json.load(file)
-            save_config(new_cfg)
+            save_config(json.load(file))
         except: pass
     return redirect(url_for("admin_dashboard"))
 
