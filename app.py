@@ -275,7 +275,12 @@ def kyogiin_view_file(file_type, filename):
     cfg = load_config()
     meta = get_file_meta(cfg, safe) if file_type == "shiryo" else {"watermark": True, "download": False, "print": False}
     ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
-    file_url = url_for("kyogiin_raw_file", file_type=file_type, filename=safe)
+
+    # PDFはFlaskプロキシ経由で配信（CORSとフォント問題を回避）
+    if ext == "pdf":
+        file_url = url_for("kyogiin_proxy_file", file_type=file_type, filename=safe)
+    else:
+        file_url = url_for("kyogiin_raw_file", file_type=file_type, filename=safe)
 
     return render_template(
         "kyogiin_viewer.html",
@@ -302,6 +307,43 @@ def kyogiin_raw_file(file_type, filename):
         meta = get_file_meta(cfg, safe)
         if request.args.get("dl") == "1" and not meta["download"]: abort(403)
     return redirect(get_cloudinary_url(file_type, safe))
+
+
+@app.route("/kyogiin/proxy/<file_type>/<path:filename>")
+def kyogiin_proxy_file(file_type, filename):
+    """
+    PDFをFlaskサーバー経由でプロキシ配信する。
+    pdf.jsがCloudinaryに直接アクセスするとCORSやフォントマップの問題で
+    日本語テキストが描画されないため、同一オリジンで配信することで回避する。
+    """
+    import urllib.request
+    from flask import Response
+    if not session.get("kyogiin_logged_in"): abort(403)
+    if file_type not in ("shiryo", "gijiroku"): abort(404)
+    safe = os.path.basename(filename)
+    ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
+    if ext != "pdf": abort(400)
+
+    cloudinary_file_url = get_cloudinary_url(file_type, safe)
+    try:
+        req = urllib.request.Request(
+            cloudinary_file_url,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            pdf_data = resp.read()
+        return Response(
+            pdf_data,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=\"{safe}\"",
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+            }
+        )
+    except Exception as e:
+        print(f"PDF proxy error: {e}")
+        abort(502)
 
 @app.route("/admin/rank1", methods=["GET", "POST"])
 def admin1_login():

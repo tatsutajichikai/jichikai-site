@@ -265,20 +265,16 @@
       ctx.restore();
     }
 
-    // ★ cMapUrl: 日本語(CJK)フォントのマッピングデータを読み込む設定
-    //    これがないと日本語テキストが描画されず表の中身が空欄になる
-    const PDFJS_VERSION = '3.11.174';
-    const CMAP_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/cmaps/`;
-
+    // Flaskプロキシ経由で取得するためCORSなし・同一オリジン
+    // useSystemFonts:trueでブラウザ内蔵フォントを使い、cmap外部依存をなくす
     pdfjsLib.getDocument({
       url: "{{ file_url }}",
-      withCredentials: false,
-      cMapUrl: CMAP_URL,      // ← 日本語フォントマップの読み込み先
-      cMapPacked: true,       // ← 圧縮済みcmapを使用（転送量削減）
-      standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/standard_fonts/`
+      withCredentials: true,
+      useSystemFonts: true,
+      disableFontFace: false,
     }).promise.then(function(doc) {
       const container = document.getElementById('pdf-pages');
-      // ページを順番に描画するため直列処理（並列だと順序が崩れる）
+      // 直列描画（ページ順序を保証）
       const renderPage = (pageNum) => {
         if (pageNum > doc.numPages) return;
         doc.getPage(pageNum).then(function(page) {
@@ -296,7 +292,7 @@
           page.render({canvasContext: canvas.getContext('2d'), viewport: viewport})
               .promise.then(() => {
                 drawWatermark(canvas);
-                renderPage(pageNum + 1); // 次のページへ
+                renderPage(pageNum + 1);
               });
         });
       };
