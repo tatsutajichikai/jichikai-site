@@ -14,9 +14,8 @@
         margin: 0; 
         background: #333; 
         user-select: none; 
-        overflow: hidden; /* 全体スクロールを殺してviewer-bodyに任せる */
+        overflow: hidden; /* PCでの余計なスクロールを防止 */
         height: 100vh;
-        width: 100vw;
     }
 
     .viewer-header {
@@ -43,54 +42,52 @@
       height: calc(100vh - 52px);
       position: relative;
       background: #525659;
-      /* ここが重要：スマホでiframeをスクロールさせるための設定 */
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
-    /* PDF表示用：スマホでiframeが勝手に伸びるのを防ぐ */
-    .pdf-container {
-        width: 100%;
-        height: 100%;
-        overflow: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
+    /* PDF表示用：PCで安定する設定 */
     .pdf-frame {
       width: 100%; 
-      height: 100%; /* containerいっぱいに広げる */
+      height: 100%;
       border: none;
       display: block;
     }
 
-    /* 画像表示用 */
-    .image-content {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      margin: 0 auto;
+    /* スマホ用：PDFがスクロールできない場合の救済ボタン */
+    .mobile-notice {
+        display: none;
+        background: #fffbe6;
+        padding: 10px;
+        text-align: center;
+        font-size: 0.85rem;
+        border-bottom: 1px solid #ffe58f;
     }
 
-    /* 透かし */
+    @media screen and (max-width: 768px) {
+        .mobile-notice { display: block; }
+        /* スマホのみ、iframeの親要素でスクロールを許可 */
+        .viewer-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .pdf-frame { height: 85vh; } /* 完全にスクロールできないiOS向けの高さ確保 */
+    }
+
+    .image-content {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain; margin: auto;
+    }
+
+    /* 透かし：密度を上げる */
     .watermark-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       pointer-events: none; z-index: 200; overflow: hidden;
-      min-height: 2000px; /* 長い書類でも透かしが続くように設定 */
     }
     .watermark-text {
       position: absolute; white-space: nowrap;
-      font-size: 20px; font-weight: bold;
+      font-size: 18px; font-weight: bold;
       color: rgba(180, 0, 0, 0.12);
       transform: rotate(-35deg);
       user-select: none;
-    }
-    
-    @media screen and (max-width: 768px) {
-        .pdf-frame {
-            min-height: 100.1%; /* iOS Safariでスクロールを強制発動させるためのハック */
-        }
     }
   </style>
 </head>
@@ -113,9 +110,10 @@
 
   <div class="viewer-body">
     {% if file_ext == 'pdf' %}
-      <div class="pdf-container">
-          <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
+      <div class="mobile-notice">
+          スマホで全ページ見れない場合は <a href="{{ file_url }}" target="_blank" style="color: #1890ff; text-decoration: underline;">ここをタップしてPDFを直接開く</a>
       </div>
+      <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
       <img src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
     {% endif %}
@@ -139,8 +137,6 @@
     (function() {
       const overlay = document.getElementById("watermarkOverlay");
       if (!overlay) return;
-      
-      // 重複防止：一度中身を空にする
       overlay.innerHTML = '';
       
       const userName = {{ user_name | tojson }};
@@ -148,15 +144,16 @@
       const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
       const waterText = `${userName} ${dateStr}`;
 
-      const cols = 3;
-      const rows = 15; 
+      // 密度を上げるためにループ回数を増やし、間隔を狭める
+      const cols = 5; 
+      const rows = 12; 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const el = document.createElement("div");
           el.className = "watermark-text";
           el.textContent = waterText;
-          el.style.left = (c * 35) + "%";
-          el.style.top  = (r * 150) + "px"; // 固定ピクセルで間隔を保つ
+          el.style.left = (c * 25) - 10 + "%"; // 重なりを出すために少し左に寄せる
+          el.style.top  = (r * 10) + "%";
           overlay.appendChild(el);
         }
       }
