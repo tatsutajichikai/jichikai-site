@@ -14,7 +14,7 @@
         margin: 0; 
         background: #333; 
         user-select: none; 
-        overflow: hidden; /* PCでの余計なスクロールを防止 */
+        overflow: hidden; 
         height: 100vh;
     }
 
@@ -47,45 +47,30 @@
       overflow: hidden;
     }
 
-    /* PDF表示用：PCで安定する設定 */
+    /* PDF表示：Googleビューアを使用して全ページ表示を強制 */
     .pdf-frame {
       width: 100%; 
       height: 100%;
       border: none;
       display: block;
-    }
-
-    /* スマホ用：PDFがスクロールできない場合の救済ボタン */
-    .mobile-notice {
-        display: none;
-        background: #fffbe6;
-        padding: 10px;
-        text-align: center;
-        font-size: 0.85rem;
-        border-bottom: 1px solid #ffe58f;
-    }
-
-    @media screen and (max-width: 768px) {
-        .mobile-notice { display: block; }
-        /* スマホのみ、iframeの親要素でスクロールを許可 */
-        .viewer-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        .pdf-frame { height: 85vh; } /* 完全にスクロールできないiOS向けの高さ確保 */
+      z-index: 100;
     }
 
     .image-content {
       max-width: 100%; max-height: 100%;
       object-fit: contain; margin: auto;
+      z-index: 100;
     }
 
-    /* 透かし：密度を上げる */
+    /* 透かし：以前の設定に戻しつつ密度確保 */
     .watermark-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       pointer-events: none; z-index: 200; overflow: hidden;
     }
     .watermark-text {
       position: absolute; white-space: nowrap;
-      font-size: 18px; font-weight: bold;
-      color: rgba(180, 0, 0, 0.12);
+      font-size: 24px; font-weight: bold;
+      color: rgba(180, 0, 0, 0.15);
       transform: rotate(-35deg);
       user-select: none;
     }
@@ -110,10 +95,10 @@
 
   <div class="viewer-body">
     {% if file_ext == 'pdf' %}
-      <div class="mobile-notice">
-          スマホで全ページ見れない場合は <a href="{{ file_url }}" target="_blank" style="color: #1890ff; text-decoration: underline;">ここをタップしてPDFを直接開く</a>
-      </div>
-      <iframe class="pdf-frame" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
+      <!-- Googleドキュメントビューアを使用（embedded=true） -->
+      <iframe class="pdf-frame" 
+              src="https://docs.google.com/viewer?url={{ file_url_abs | urlencode }}&embedded=true" 
+              title="PDF Viewer"></iframe>
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
       <img src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
     {% endif %}
@@ -144,16 +129,16 @@
       const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
       const waterText = `${userName} ${dateStr}`;
 
-      // 密度を上げるためにループ回数を増やし、間隔を狭める
-      const cols = 5; 
-      const rows = 12; 
+      // 以前の設定（4x10配置）
+      const cols = 4;
+      const rows = 10;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const el = document.createElement("div");
           el.className = "watermark-text";
           el.textContent = waterText;
-          el.style.left = (c * 25) - 10 + "%"; // 重なりを出すために少し左に寄せる
-          el.style.top  = (r * 10) + "%";
+          el.style.left = (c * 30) + "%";
+          el.style.top  = (r * 15) + "%";
           overlay.appendChild(el);
         }
       }
