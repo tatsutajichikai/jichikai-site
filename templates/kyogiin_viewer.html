@@ -10,6 +10,15 @@
     @media print { html, body { display: none !important; } }
     {% endif %}
 
+    @media print {
+      .viewer-header { display: none !important; }
+      .viewer-body   { margin-top: 0 !important; height: auto !important; overflow: visible !important; }
+      #pdfMobileViewer { overflow: visible !important; height: auto !important; display: block !important; }
+      #pdfMobileViewer canvas { box-shadow: none !important; margin: 0 !important; page-break-after: always; }
+      .pdf-frame { display: none !important; }
+      .watermark-overlay { display: none !important; }
+    }
+
     body {
       margin: 0;
       background: #525659;
@@ -30,11 +39,13 @@
       flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .viewer-header-btns { display: flex; gap: 8px; flex-shrink: 0; }
-    .viewer-header a {
+    .viewer-header a,
+    .viewer-header button {
       color: rgba(255,255,255,.85); font-size: .85rem;
       padding: 5px 14px; border: 1px solid rgba(255,255,255,.4);
       border-radius: 4px; text-decoration: none;
-      background: transparent;
+      background: transparent; cursor: pointer;
+      font-family: inherit;
     }
 
     .viewer-body {
@@ -46,7 +57,6 @@
       overflow: hidden;
     }
 
-    /* PC用 */
     .pdf-frame {
       width: 100%;
       height: 100%;
@@ -54,7 +64,6 @@
       display: block;
     }
 
-    /* スマホ用：PDF.jsキャンバス表示エリア */
     #pdfMobileViewer {
       display: none;
       width: 100%;
@@ -118,7 +127,10 @@
     <span class="title">📄 {{ display_name }}</span>
     <div class="viewer-header-btns">
       {% if allow_download %}
-      <a href="{{ file_url }}?dl=1" download="{{ display_name }}">⬇️</a>
+      <a href="{{ file_url }}?dl=1" download="{{ display_name }}">ダウンロード</a>
+      {% endif %}
+      {% if allow_print %}
+      <button onclick="handlePrint()">印刷</button>
       {% endif %}
       <a href="{{ url_for('kyogiin_files', month=back_month) }}">← 戻る</a>
     </div>
@@ -126,15 +138,12 @@
 
   <div class="viewer-body">
     {% if file_ext == 'pdf' %}
-
-      {# PC用 #}
       <iframe
         class="pdf-frame"
         src="{{ file_url }}#toolbar=0"
         title="PDF Viewer">
       </iframe>
 
-      {# スマホ用 #}
       <div id="pdfLoading">📄 読み込み中...</div>
       <div id="pdfMobileViewer"></div>
 
@@ -148,22 +157,15 @@
   </div>
 
   {% if file_ext == 'pdf' %}
-  {#
-    PDF.js legacy build（ES Modules非依存）を使用。
-    type="module" + dynamic import() はiOS Safariで失敗するケースがあるため
-    従来の<script>タグで読み込む。
-  #}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     (function () {
-      // PCはiframeで表示するのでスキップ
       if (window.innerWidth > 768) return;
 
-      // PDF.jsのWorkerパスを設定（legacyビルドに対応したworker）
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-      var PDF_URL  = {{ file_url_abs | tojson }};
+      var PDF_URL   = {{ file_url_abs | tojson }};
       var container = document.getElementById("pdfMobileViewer");
       var loading   = document.getElementById("pdfLoading");
 
@@ -174,10 +176,8 @@
           var viewerWidth = container.clientWidth || window.innerWidth;
           var dpr = window.devicePixelRatio || 1;
 
-          // ページを順番に描画（再帰で直列処理）
           function renderPage(pageNum) {
             if (pageNum > pdf.numPages) return;
-
             pdf.getPage(pageNum).then(function (page) {
               var scale    = viewerWidth / page.getViewport({ scale: 1 }).width;
               var viewport = page.getViewport({ scale: scale * dpr });
@@ -217,6 +217,44 @@
       }
     });
     {% endif %}
+
+    function handlePrint() {
+      var isMobile = window.innerWidth <= 768;
+
+      {% if file_ext == 'pdf' %}
+      if (isMobile) {
+        // スマホ：canvasをJPEGに変換して新しいウィンドウで印刷
+        var canvases = document.querySelectorAll("#pdfMobileViewer canvas");
+        if (canvases.length === 0) {
+          alert("まだ読み込み中です。しばらくお待ちください。");
+          return;
+        }
+        var win = window.open("", "_blank");
+        win.document.write(
+          "<html><head><title>印刷</title>" +
+          "<style>body{margin:0;padding:0;background:#fff;}" +
+          "img{display:block;width:100%;page-break-after:always;}</style>" +
+          "</head><body>"
+        );
+        canvases.forEach(function(canvas) {
+          win.document.write('<img src="' + canvas.toDataURL("image/jpeg", 0.92) + '">');
+        });
+        win.document.write("</body></html>");
+        win.document.close();
+        win.onload = function() { win.print(); };
+      } else {
+        // PC：PDFを新しいタブで直接開き、ブラウザの印刷ダイアログを呼び出す
+        var PDF_URL = {{ file_url_abs | tojson }};
+        var win = window.open(PDF_URL, "_blank");
+        win.onload = function() {
+          win.print();
+        };
+      }
+      {% else %}
+      // 画像ファイル
+      window.print();
+      {% endif %}
+    }
 
     {% if watermark or file_type == 'gijiroku' %}
     (function() {
