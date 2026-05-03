@@ -102,8 +102,8 @@ JICHIKAI = {
     ]
 }
 
-MONTHS = [str(i) + "月" for i in range(1, 13)]
-
+# 4月開始、3月終了に変更
+MONTHS = ["4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月"]
 
 def get_files_by_month(folder_type):
     result = {m: [] for m in MONTHS}
@@ -124,14 +124,15 @@ def get_files_by_month(folder_type):
                 fname = f"{base_name}.{fmt}" if fmt else base_name
 
                 prefix_part = base_name.split("_")[0]
-                if prefix_part.isdigit() and 1 <= int(prefix_part) <= 12:
-                    month_key = str(int(prefix_part)) + "月"
-                    if fname not in result[month_key]:
-                        result[month_key].append(fname)
+                if prefix_part.isdigit():
+                    m_num = int(prefix_part)
+                    if 1 <= m_num <= 12:
+                        month_key = f"{m_num}月"
+                        if month_key in result and fname not in result[month_key]:
+                            result[month_key].append(fname)
         except Exception as e:
             print(f"Cloudinary list error ({folder_type}, {r_type}): {e}")
     return result
-
 
 def get_cloudinary_url(folder_type, fname):
     cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dyhtmmqnk")
@@ -147,7 +148,6 @@ def get_cloudinary_url(folder_type, fname):
     else:
         return f"https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}.{ext}"
 
-
 def get_display_name(fname):
     if "." in fname:
         base, ext = fname.rsplit(".", 1)
@@ -157,7 +157,6 @@ def get_display_name(fname):
     else:
         parts = fname.split("_", 1)
         return parts[1] if len(parts) > 1 and parts[0].isdigit() else fname
-
 
 def get_file_meta(cfg, fname):
     meta = cfg.get("file_meta", {}).get(fname, {})
@@ -176,8 +175,9 @@ def index():
 
 @app.route("/kyogiin", methods=["GET", "POST"])
 def kyogiin():
+    # ログイン後の初期表示を4月に変更
     if session.get("kyogiin_logged_in"):
-        return redirect(url_for("kyogiin_files", month="1月"))
+        return redirect(url_for("kyogiin_files", month="4月"))
     error = None
     if request.method == "POST":
         cfg = load_config()
@@ -188,7 +188,7 @@ def kyogiin():
             if check_password_hash(users[name]["password_hash"], password):
                 session["kyogiin_logged_in"] = True
                 session["kyogiin_name"] = name
-                return redirect(url_for("kyogiin_files", month="1月"))
+                return redirect(url_for("kyogiin_files", month="4月"))
         error = "名前またはパスワードが違います"
     return render_template("kyogiin_login.html", company=JICHIKAI, error=error)
 
@@ -202,7 +202,7 @@ def kyogiin_logout():
 def kyogiin_files(month):
     if not session.get("kyogiin_logged_in"):
         return redirect(url_for("kyogiin"))
-    if month not in MONTHS: month = "1月"
+    if month not in MONTHS: month = "4月"
     return render_template(
         "kyogiin_files.html",
         company=JICHIKAI, months=MONTHS, current_month=month,
@@ -246,6 +246,10 @@ def kyogiin_view_file(file_type, filename):
     ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
     file_url = url_for("kyogiin_raw_file", file_type=file_type, filename=safe)
 
+    # 戻り先の月を判定するための数値取得
+    prefix_part = safe.split("_")[0]
+    back_month = f"{int(prefix_part)}月" if prefix_part.isdigit() else "4月"
+
     return render_template(
         "kyogiin_viewer.html",
         company=JICHIKAI,
@@ -259,7 +263,8 @@ def kyogiin_view_file(file_type, filename):
         allow_download=meta["download"],
         allow_print=meta["print"],
         is_pdf=(ext == "pdf"),
-        file_type=file_type
+        file_type=file_type,
+        back_month=back_month
     )
 
 @app.route("/kyogiin/raw/<file_type>/<path:filename>")
@@ -342,7 +347,7 @@ def admin_dashboard():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "upload_shiryo":
-            month = request.form.get("month", "1月")
+            month = request.form.get("month", "4月")
             file = request.files.get("file")
             watermark   = request.form.get("watermark") == "1"
             download    = request.form.get("download")  == "1"
@@ -352,7 +357,8 @@ def admin_dashboard():
             elif file.filename.rsplit(".", 1)[-1].lower() in BLOCKED_SHIRYO:
                 msg = ("danger", "PDF化してください")
             else:
-                month_num = MONTHS.index(month) + 1
+                m_match = re.search(r"(\d+)", month)
+                month_num = int(m_match.group(1)) if m_match else 4
                 original_filename = file.filename
                 ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
                 base_name = strip_month_prefix(
@@ -383,12 +389,13 @@ def admin_dashboard():
                     msg = ("danger", f"失敗: {e}")
 
         elif action == "upload_gijiroku":
-            month = request.form.get("month", "1月")
+            month = request.form.get("month", "4月")
             file = request.files.get("file")
             if not file or not allowed_gijiroku(file.filename):
                 msg = ("danger", "PDFのみ")
             else:
-                month_num = MONTHS.index(month) + 1
+                m_match = re.search(r"(\d+)", month)
+                month_num = int(m_match.group(1)) if m_match else 4
                 original_filename = file.filename
                 base_name = strip_month_prefix(original_filename.rsplit(".", 1)[0])
                 try:
