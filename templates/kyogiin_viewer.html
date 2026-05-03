@@ -10,20 +10,18 @@
     @media print { html, body { display: none !important; } }
     {% endif %}
 
-    /* 印刷時のスタイル：透かし付きcanvasページのみ印刷 */
     @media print {
       body { overflow: visible !important; height: auto !important; background: #fff !important; }
-      .viewer-header  { display: none !important; }
-      .viewer-body    { margin-top: 0 !important; height: auto !important; overflow: visible !important; }
-      /* 通常ビュー（iframe・pdfMobileViewer）は非表示 */
-      .pdf-frame      { display: none !important; }
+      .viewer-header   { display: none !important; }
+      .viewer-body     { margin-top: 0 !important; height: auto !important; overflow: visible !important; }
+      .pdf-frame       { display: none !important; }
       #pdfMobileViewer { display: none !important; }
-      #pdfLoading     { display: none !important; }
-      /* 印刷用コンテナのみ表示 */
-      #printContainer { display: block !important; }
+      #pdfLoading      { display: none !important; }
+      #printContainer  { display: block !important; }
       #printContainer canvas { display: block; width: 100% !important; page-break-after: always; margin: 0; box-shadow: none; }
       .watermark-overlay { display: none !important; }
-      .image-content  { max-width: 100%; }
+      /* 画像ファイルの印刷：通常のimg は非表示にしてprintContainerのcanvasを使う */
+      .image-content   { display: none !important; }
     }
 
     body {
@@ -104,7 +102,6 @@
       #pdfLoading { display: block; }
     }
 
-    /* 印刷用コンテナ：通常時は非表示 */
     #printContainer {
       display: none;
       position: absolute;
@@ -158,15 +155,13 @@
         src="{{ file_url }}#toolbar=0"
         title="PDF Viewer">
       </iframe>
-
       <div id="pdfLoading">📄 読み込み中...</div>
       <div id="pdfMobileViewer"></div>
-
-      {# 印刷用コンテナ（透かし込みcanvasをここに複製して印刷） #}
       <div id="printContainer"></div>
 
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
-      <img src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
+      <img id="mainImage" src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
+      <div id="printContainer"></div>
     {% endif %}
 
     {% if watermark or file_type == 'gijiroku' %}
@@ -176,119 +171,74 @@
 
   {% if file_ext == 'pdf' %}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  {% endif %}
 
+  <script>
+    var FILE_EXT     = {{ file_ext | tojson }};
     var PDF_URL      = {{ file_url_abs | tojson }};
     var DISPLAY_NAME = {{ display_name | tojson }};
     var USE_WATERMARK = {{ (watermark or file_type == 'gijiroku') | tojson }};
     var USER_NAME    = {{ user_name | tojson }};
 
-    var pdfDoc = null; // ロード済みPDFを保持
+    var pdfDoc = null;
 
-    // ── スマホ用：画面表示 ──────────────────────────────
-    (function () {
-      if (window.innerWidth > 768) return;
-
-      var container = document.getElementById("pdfMobileViewer");
-      var loading   = document.getElementById("pdfLoading");
-
-      pdfjsLib.getDocument({ url: PDF_URL, withCredentials: false }).promise
-        .then(function (pdf) {
-          pdfDoc = pdf;
-          loading.style.display = "none";
-
-          var viewerWidth = container.clientWidth || window.innerWidth;
-          var dpr = window.devicePixelRatio || 1;
-
-          function renderPage(pageNum) {
-            if (pageNum > pdf.numPages) return;
-            pdf.getPage(pageNum).then(function (page) {
-              var scale    = viewerWidth / page.getViewport({ scale: 1 }).width;
-              var viewport = page.getViewport({ scale: scale * dpr });
-
-              var canvas        = document.createElement("canvas");
-              canvas.width      = viewport.width;
-              canvas.height     = viewport.height;
-              canvas.style.width  = (viewport.width  / dpr) + "px";
-              canvas.style.height = (viewport.height / dpr) + "px";
-              container.appendChild(canvas);
-
-              page.render({
-                canvasContext: canvas.getContext("2d"),
-                viewport: viewport
-              }).promise.then(function () {
-                renderPage(pageNum + 1);
-              });
-            });
-          }
-          renderPage(1);
-        })
-        .catch(function (err) {
-          loading.textContent = "PDFの読み込みに失敗しました。";
-          console.error("PDF.js error:", err);
-        });
-    })();
-
-    // ── PC用：印刷のためにPDFをバックグラウンドでロード ──
-    (function () {
-      if (window.innerWidth <= 768) return;
-      pdfjsLib.getDocument({ url: PDF_URL, withCredentials: false }).promise
-        .then(function (pdf) { pdfDoc = pdf; })
-        .catch(function (err) { console.error("PDF preload error:", err); });
-    })();
-
-    // ── 透かしテキスト生成ヘルパー ──────────────────────
+    // ── 透かしテキスト ────────────────────────────────────
     function makeWatermarkText() {
       var now = new Date();
-      var dateStr = now.getFullYear() + "/" +
-                    String(now.getMonth() + 1).padStart(2, "0") + "/" +
-                    String(now.getDate()).padStart(2, "0");
-      return USER_NAME + " " + dateStr;
+      return USER_NAME + " " +
+             now.getFullYear() + "/" +
+             String(now.getMonth() + 1).padStart(2, "0") + "/" +
+             String(now.getDate()).padStart(2, "0");
     }
 
-    // ── 透かしをcanvasに描画 ─────────────────────────────
+    // ── canvasに透かし描画 ────────────────────────────────
     function drawWatermark(canvas) {
       var ctx  = canvas.getContext("2d");
       var text = makeWatermarkText();
       ctx.save();
-      ctx.font = "bold " + Math.round(canvas.width * 0.035) + "px sans-serif";
+      ctx.font      = "bold " + Math.round(canvas.width * 0.035) + "px sans-serif";
       ctx.fillStyle = "rgba(180, 0, 0, 0.15)";
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(-35 * Math.PI / 180);
-
-      var step_x = canvas.width  * 0.35;
-      var step_y = canvas.height * 0.15;
-      for (var ry = -canvas.height; ry < canvas.height * 1.5; ry += step_y) {
-        for (var rx = -canvas.width; rx < canvas.width * 1.5; rx += step_x) {
+      var stepX = canvas.width  * 0.35;
+      var stepY = canvas.height * 0.15;
+      for (var ry = -canvas.height; ry < canvas.height * 1.5; ry += stepY) {
+        for (var rx = -canvas.width; rx < canvas.width * 1.5; rx += stepX) {
           ctx.fillText(text, rx, ry);
         }
       }
       ctx.restore();
     }
 
-    // ── 全ページを高解像度canvasにレンダリングして返す ──
-    function renderAllPages(dpr) {
+    // ── 画像をcanvasに描画（透かし条件付き） ─────────────
+    function renderImageToCanvas(imgEl, withWatermark) {
+      var canvas    = document.createElement("canvas");
+      canvas.width  = imgEl.naturalWidth;
+      canvas.height = imgEl.naturalHeight;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(imgEl, 0, 0);
+      if (withWatermark) drawWatermark(canvas);
+      return canvas;
+    }
+
+    // ── PDF：全ページcanvasレンダリング（透かし条件付き） ─
+    function renderAllPdfPages(withWatermark) {
       if (!pdfDoc) return Promise.reject("PDF not loaded");
-      dpr = dpr || 2;
       var pages = [];
       function next(num) {
         if (num > pdfDoc.numPages) return Promise.resolve(pages);
         return pdfDoc.getPage(num).then(function (page) {
-          var vp     = page.getViewport({ scale: 1 });
-          // A4相当の幅（794px）を基準にスケール
-          var scale  = (794 / vp.width) * dpr;
+          var vp       = page.getViewport({ scale: 1 });
+          var scale    = (794 / vp.width) * 2; // A4幅 × Retina
           var viewport = page.getViewport({ scale: scale });
-
-          var canvas  = document.createElement("canvas");
+          var canvas   = document.createElement("canvas");
           canvas.width  = viewport.width;
           canvas.height = viewport.height;
           return page.render({
             canvasContext: canvas.getContext("2d"),
             viewport: viewport
           }).promise.then(function () {
-            if (USE_WATERMARK) drawWatermark(canvas);
+            if (withWatermark) drawWatermark(canvas);
             pages.push(canvas);
             return next(num + 1);
           });
@@ -296,10 +246,113 @@
       }
       return next(1);
     }
-  </script>
-  {% endif %}
 
-  <script>
+    // ── PDF.js 初期化 ─────────────────────────────────────
+    {% if file_ext == 'pdf' %}
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    // スマホ用：画面表示
+    (function () {
+      if (window.innerWidth > 768) return;
+      var container = document.getElementById("pdfMobileViewer");
+      var loading   = document.getElementById("pdfLoading");
+      pdfjsLib.getDocument({ url: PDF_URL, withCredentials: false }).promise
+        .then(function (pdf) {
+          pdfDoc = pdf;
+          loading.style.display = "none";
+          var viewerWidth = container.clientWidth || window.innerWidth;
+          var dpr = window.devicePixelRatio || 1;
+          function renderPage(pageNum) {
+            if (pageNum > pdf.numPages) return;
+            pdf.getPage(pageNum).then(function (page) {
+              var scale    = viewerWidth / page.getViewport({ scale: 1 }).width;
+              var viewport = page.getViewport({ scale: scale * dpr });
+              var canvas        = document.createElement("canvas");
+              canvas.width      = viewport.width;
+              canvas.height     = viewport.height;
+              canvas.style.width  = (viewport.width  / dpr) + "px";
+              canvas.style.height = (viewport.height / dpr) + "px";
+              container.appendChild(canvas);
+              page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport })
+                .promise.then(function () { renderPage(pageNum + 1); });
+            });
+          }
+          renderPage(1);
+        })
+        .catch(function (err) {
+          loading.textContent = "PDFの読み込みに失敗しました。";
+          console.error(err);
+        });
+    })();
+
+    // PC用：印刷のためにバックグラウンドでロード
+    (function () {
+      if (window.innerWidth <= 768) return;
+      pdfjsLib.getDocument({ url: PDF_URL, withCredentials: false }).promise
+        .then(function (pdf) { pdfDoc = pdf; })
+        .catch(function (err) { console.error("PDF preload error:", err); });
+    })();
+    {% endif %}
+
+    // ── ダウンロード ──────────────────────────────────────
+    function handleDownload() {
+      fetch(PDF_URL)
+        .then(function (res) {
+          if (!res.ok) throw new Error("fetch failed");
+          return res.blob();
+        })
+        .then(function (blob) {
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = DISPLAY_NAME;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function () {
+            URL.revokeObjectURL(a.href);
+            document.body.removeChild(a);
+          }, 1000);
+        })
+        .catch(function () { alert("ダウンロードに失敗しました。"); });
+    }
+
+    // ── 印刷 ──────────────────────────────────────────────
+    function handlePrint() {
+      var printContainer = document.getElementById("printContainer");
+      printContainer.innerHTML = "";
+
+      if (FILE_EXT === "pdf") {
+        // PDF
+        if (!pdfDoc) { alert("まだ読み込み中です。しばらくお待ちください。"); return; }
+        renderAllPdfPages(USE_WATERMARK).then(function (canvases) {
+          canvases.forEach(function (c) { printContainer.appendChild(c); });
+          showPrintContainer(printContainer);
+        }).catch(function () { alert("印刷の準備に失敗しました。"); });
+
+      } else {
+        // 画像
+        var imgEl = document.getElementById("mainImage");
+        if (!imgEl || !imgEl.complete || imgEl.naturalWidth === 0) {
+          alert("まだ読み込み中です。しばらくお待ちください。");
+          return;
+        }
+        var canvas = renderImageToCanvas(imgEl, USE_WATERMARK);
+        printContainer.appendChild(canvas);
+        showPrintContainer(printContainer);
+      }
+    }
+
+    function showPrintContainer(printContainer) {
+      printContainer.style.position = "static";
+      printContainer.style.top      = "auto";
+      window.print();
+      setTimeout(function () {
+        printContainer.style.position = "absolute";
+        printContainer.style.top      = "-99999px";
+        printContainer.innerHTML      = "";
+      }, 2000);
+    }
+
     {% if not allow_print %}
     document.addEventListener("keydown", function(e) {
       if ((e.ctrlKey && (e.key === "p" || e.key === "s" || e.key === "u")) || e.key === "F12") {
@@ -309,78 +362,13 @@
     });
     {% endif %}
 
-    // ── ダウンロード：fetch → Blob → <a>クリックでダイアログ表示 ──
-    function handleDownload() {
-      var url  = {{ file_url_abs | tojson }};
-      var name = {{ display_name | tojson }};
-      fetch(url)
-        .then(function (res) {
-          if (!res.ok) throw new Error("fetch failed");
-          return res.blob();
-        })
-        .then(function (blob) {
-          var a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = name;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(function () {
-            URL.revokeObjectURL(a.href);
-            document.body.removeChild(a);
-          }, 1000);
-        })
-        .catch(function (err) {
-          alert("ダウンロードに失敗しました。");
-          console.error(err);
-        });
-    }
-
-    // ── 印刷：透かし込みcanvasをprintContainerに入れてwindow.print() ──
-    function handlePrint() {
-      {% if file_ext == 'pdf' %}
-      if (!pdfDoc) {
-        alert("まだ読み込み中です。しばらくお待ちください。");
-        return;
-      }
-      var printContainer = document.getElementById("printContainer");
-      printContainer.innerHTML = "";
-
-      renderAllPages(2).then(function (canvases) {
-        canvases.forEach(function (canvas) {
-          printContainer.appendChild(canvas);
-        });
-        // printContainer を一時的に表示して印刷
-        printContainer.style.position = "static";
-        printContainer.style.top      = "auto";
-        window.print();
-        // 印刷ダイアログが閉じたら元に戻す
-        setTimeout(function () {
-          printContainer.style.position = "absolute";
-          printContainer.style.top      = "-99999px";
-          printContainer.innerHTML      = "";
-        }, 2000);
-      }).catch(function (err) {
-        alert("印刷の準備に失敗しました。");
-        console.error(err);
-      });
-      {% else %}
-      window.print();
-      {% endif %}
-    }
-
+    // ── 透かしオーバーレイ（画面表示用） ─────────────────
     {% if watermark or file_type == 'gijiroku' %}
     (function() {
       var overlay = document.getElementById("watermarkOverlay");
       if (!overlay) return;
       overlay.innerHTML = "";
-
-      var userName  = {{ user_name | tojson }};
-      var now       = new Date();
-      var dateStr   = now.getFullYear() + "/" +
-                      String(now.getMonth() + 1).padStart(2, "0") + "/" +
-                      String(now.getDate()).padStart(2, "0");
-      var waterText = userName + " " + dateStr;
-
+      var waterText = makeWatermarkText();
       var cols = 4, rows = 10;
       for (var r = 0; r < rows; r++) {
         for (var c = 0; c < cols; c++) {
