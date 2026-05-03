@@ -10,13 +10,13 @@
     @media print { html, body { display: none !important; } }
     {% endif %}
 
-    body { 
-        margin: 0; 
-        background: #333; 
-        user-select: none; 
-        overflow: hidden; 
-        height: 100vh;
-        width: 100vw;
+    body {
+      margin: 0;
+      background: #525659;
+      user-select: none;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
     }
 
     .viewer-header {
@@ -39,43 +39,53 @@
 
     .viewer-body {
       margin-top: 52px;
-      width: 100%; 
+      width: 100%;
       height: calc(100vh - 52px);
       position: relative;
       background: #525659;
-      /* スマホSafariでのスクロールを補助 */
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow: hidden;
     }
 
-    /* PDF表示エリア：スマホでスクロールを発生させるための設定 */
-    .pdf-wrapper {
+    /* ── PC用：iframeをそのまま全画面表示 ── */
+    .pdf-frame {
       width: 100%;
-      height: 100%;
-      overflow: auto;
-    }
-
-    .pdf-content {
-      width: 100%; 
       height: 100%;
       border: none;
       display: block;
     }
 
-    /* スマホ専用の調整 */
+    /* ── スマホ用：PDF.jsキャンバス表示エリア ── */
+    #pdfMobileViewer {
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
+      background: #525659;
+    }
+    #pdfMobileViewer canvas {
+      display: block;
+      margin: 8px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
     @media screen and (max-width: 768px) {
-        .viewer-body {
-            overflow-y: scroll; /* スクロールを強制 */
-        }
-        .pdf-wrapper {
-            /* iOS Safariでiframeを全ページ表示させるための高さ確保 */
-            height: auto;
-            min-height: 100%;
-        }
-        .pdf-content {
-            /* iPhoneで1枚目しか見れない現象を防ぐため高さを固定せず広げる */
-            height: 85vh; 
-        }
+      .pdf-frame        { display: none !important; }
+      #pdfMobileViewer  { display: block; }
+    }
+
+    /* ローディング表示 */
+    #pdfLoading {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ccc;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    @media screen and (max-width: 768px) {
+      #pdfLoading { display: block; }
     }
 
     .image-content {
@@ -84,7 +94,7 @@
       display: block;
     }
 
-    /* 透かしの設定（以前の設定を復元） */
+    /* 透かし */
     .watermark-overlay {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       pointer-events: none; z-index: 200; overflow: hidden;
@@ -117,9 +127,18 @@
 
   <div class="viewer-body">
     {% if file_ext == 'pdf' %}
-      <div class="pdf-wrapper">
-          <iframe class="pdf-content" src="{{ file_url }}#toolbar=0" title="PDF Viewer"></iframe>
-      </div>
+
+      {# PC用：直接iframe #}
+      <iframe
+        class="pdf-frame"
+        src="{{ file_url }}#toolbar=0"
+        title="PDF Viewer">
+      </iframe>
+
+      {# スマホ用：PDF.jsでキャンバスレンダリング #}
+      <div id="pdfLoading">📄 読み込み中...</div>
+      <div id="pdfMobileViewer"></div>
+
     {% elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
       <img src="{{ file_url }}" class="image-content" alt="{{ display_name }}">
     {% endif %}
@@ -128,6 +147,50 @@
     <div class="watermark-overlay" id="watermarkOverlay"></div>
     {% endif %}
   </div>
+
+  {% if file_ext == 'pdf' %}
+  <script type="module">
+    // スマホのみ PDF.js を実行
+    if (window.innerWidth > 768) return; // PC はiframeで表示
+
+    // PDF.js CDN（Mozilla公式）
+    const { default: pdfjsLib } = await import(
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+    const PDF_URL   = {{ file_url_abs | tojson }};
+    const container = document.getElementById("pdfMobileViewer");
+    const loading   = document.getElementById("pdfLoading");
+
+    try {
+      const pdf = await pdfjsLib.getDocument({ url: PDF_URL, withCredentials: false }).promise;
+      loading.style.display = "none";
+
+      const viewerWidth = container.clientWidth || window.innerWidth;
+      const dpr = window.devicePixelRatio || 1;
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page     = await pdf.getPage(pageNum);
+        const scale    = viewerWidth / page.getViewport({ scale: 1 }).width;
+        const viewport = page.getViewport({ scale: scale * dpr });
+
+        const canvas        = document.createElement("canvas");
+        canvas.width        = viewport.width;
+        canvas.height       = viewport.height;
+        canvas.style.width  = (viewport.width  / dpr) + "px";
+        canvas.style.height = (viewport.height / dpr) + "px";
+        container.appendChild(canvas);
+
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      }
+    } catch (err) {
+      loading.textContent = "PDFの読み込みに失敗しました。";
+      console.error("PDF.js error:", err);
+    }
+  </script>
+  {% endif %}
 
   <script>
     {% if not allow_print %}
@@ -144,22 +207,20 @@
       const overlay = document.getElementById("watermarkOverlay");
       if (!overlay) return;
       overlay.innerHTML = '';
-      
+
       const userName = {{ user_name | tojson }};
-      const now = new Date();
-      const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+      const now      = new Date();
+      const dateStr  = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
       const waterText = `${userName} ${dateStr}`;
 
-      // 4列 x 10行の設定
-      const cols = 4;
-      const rows = 10;
+      const cols = 4, rows = 10;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const el = document.createElement("div");
-          el.className = "watermark-text";
+          el.className  = "watermark-text";
           el.textContent = waterText;
-          el.style.left = (c * 30) + "%";
-          el.style.top  = (r * 15) + "%";
+          el.style.left  = (c * 30) + "%";
+          el.style.top   = (r * 15) + "%";
           overlay.appendChild(el);
         }
       }
