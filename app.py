@@ -421,7 +421,7 @@ def admin_dashboard():
                 cloudinary.uploader.destroy(f"jichikai/shiryo/{base}", resource_type=r_type)
                 cfg.get("file_meta", {}).pop(fname, None)
                 save_config(cfg)
-                msg = ("success", "削除しました")
+                msg = ("success", f"「{get_display_name(fname)}」を削除しました")
             except Exception as e:
                 msg = ("danger", f"失敗: {e}")
 
@@ -431,7 +431,7 @@ def admin_dashboard():
             try:
                 cloudinary.uploader.destroy(f"jichikai/gijiroku/{base}", resource_type="image")
                 save_config(cfg)
-                msg = ("success", "削除しました")
+                msg = ("success", f"「{get_display_name(fname)}」を削除しました")
             except Exception as e:
                 msg = ("danger", f"失敗: {e}")
 
