@@ -81,7 +81,7 @@ JICHIKAI = {
     "description": "私たち立田自治会は、地域の皆さまが安心して暮らせるまちづくりを目指しています。",
 #    "email": "jichikai-xxx@example.com",
     "phone": "077-585-2266",
-    "address": "滋賀県守山市立田町",
+    "address": "滋賀県守山市立田町 1528-4",
     "meeting_day": "毎月第3土曜日 午後19時30分〜",
     "meeting_place": "集落センター",
     "services": [
