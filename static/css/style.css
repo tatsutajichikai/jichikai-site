@@ -469,14 +469,3 @@ footer {
 }
 .footer-link:hover { color: #fff; }
 .footer-sep { color: rgba(255,255,255,.4); font-size: .85rem; }
-
-.calendar-link {
-  text-align: center;
-  margin-top: 12px;
-}
-
-.calendar-link a {
-  color: #2e7d32;
-  font-size: 0.95rem;
-  text-decoration: underline;
-}
