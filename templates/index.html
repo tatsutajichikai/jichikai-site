@@ -45,15 +45,9 @@
 
 <section id="events">
   <h2>年間行事カレンダー</h2>
-  <div class="timeline">
-    {% for e in company.events %}
-    {% if e.name %}
-    <div class="timeline-item">
-      <div class="timeline-month">{{ e.month }}</div>
-      <div class="timeline-name">{{ e.name }}</div>
-    </div>
-    {% endif %}
-    {% endfor %}
+  <div style="overflow-x: auto;">
+    <iframe src="https://calendar.google.com/calendar/embed?src=tatsutajichikai%40gmail.com&ctz=Asia%2FTokyo&hl=ja"
+      style="border:0" width="800" height="600" frameborder="0" scrolling="no"></iframe>
   </div>
 </section>
 
