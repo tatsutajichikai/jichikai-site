@@ -38,6 +38,9 @@
       <div class="icon">{{ s.icon }}</div>
       <h3>{{ s.title }}</h3>
       <p>{{ s.desc }}</p>
+      {% if s.title == "地域イベント" %}
+      <a href="/event/chiiki" class="btn" style="margin-top: 12px; display: inline-block;">詳細を見る</a>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

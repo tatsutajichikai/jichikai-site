@@ -510,6 +510,10 @@ def admin_upload_config():
         except: pass
     return redirect(url_for("admin_dashboard"))
 
+@app.route('/event/chiiki')
+def event_chiiki():
+    return render_template('event_chiiki.html', company=JICHIKAI)
+
 @app.route("/ping")
 def ping(): return "pong", 200
 
