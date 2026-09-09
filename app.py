@@ -223,6 +223,8 @@ JICHIKAI = {
         {"icon": "♻️", "title": "ごみ・環境美化", "desc": "ごみ収集ルールの周知と、地域の清掃活動を定期的に実施しています。", "tag_id": "gomi"},
         {"icon": "👴", "title": "高齢者・福祉サポート", "desc": "一人暮らしの高齢者への見守り活動や、福祉情報の提供を行っています。", "tag_id": "koreisha"},
         {"icon": "📢", "title": "情報共有・広報", "desc": "回覧板を通じて、地域の最新情報をお届けします。", "tag_id": "joho"},
+        {"icon": "🌾", "title": "農業振興組合・農地保全会", "desc": "農業関係の情報を提供します。", "tag_id": "nogyo"},
+        {"icon": "🏫", "title": "中洲学区", "desc": "中洲学区の情報や行事など提供します。", "tag_id": "nakasu"},
     ],
     "events": [
         {"month": "4月", "name": "総会"}, {"month": "5月", "name": ""},
@@ -777,6 +779,8 @@ ACTIVITY_TAGS = [
     {"id": "gomi",     "title": "ごみ・環境美化",       "icon": "♻️"},
     {"id": "koreisha", "title": "高齢者・福祉サポート", "icon": "👴"},
     {"id": "joho",     "title": "情報共有・サポート",   "icon": "📢"},
+    {"id": "nogyo",    "title": "農業振興組合・農地保全会", "icon": "🌾"},
+    {"id": "nakasu",   "title": "中洲学区",             "icon": "🏫"},
 ]
 ACTIVITY_TAG_IDS = {t["id"] for t in ACTIVITY_TAGS}
 
