@@ -358,6 +358,10 @@ def index():
     news_items = cloud_json_load("news_items", default_news_items())
     return render_template("index.html", company=JICHIKAI, hero_photos=hero_photos, news_items=news_items)
 
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html", company=JICHIKAI)
+
 @app.route("/kyogiin", methods=["GET", "POST"])
 def kyogiin():
     # ログイン後の初期表示を4月に変更

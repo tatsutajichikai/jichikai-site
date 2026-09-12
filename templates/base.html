@@ -68,6 +68,8 @@
   <footer>
     <p>&copy; 2026 {{ company.name }}. All Rights Reserved.</p>
     <div class="footer-links">
+      <a href="{{ url_for('privacy') }}" class="footer-link">プライバシーポリシー</a>
+      <span class="footer-sep">｜</span>
       <a href="{{ url_for('kyogiin') }}" class="footer-link">🔒 協議員専用ページ</a>
       <span class="footer-sep">｜</span>
       <a href="{{ url_for('page_admin_login') }}" class="footer-link">🛠️ ページ管理者</a>
