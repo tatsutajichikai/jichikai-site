@@ -341,13 +341,7 @@ def _page_admin_authorized():
     return ok
 
 def default_hero_photos():
-    return {
-        "images": [
-            {"url": url_for("static", filename="images/hero_photo1.png"), "alt": "お知らせ画像1"},
-            {"url": url_for("static", filename="images/hero_photo2.png"), "alt": "お知らせ画像2"},
-            {"url": url_for("static", filename="images/hero_photo3.png"), "alt": "お知らせ画像3"},
-        ]
-    }
+    return {"images": []}
 
 def default_news_items():
     return {"entries": []}
